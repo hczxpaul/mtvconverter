@@ -1,6 +1,6 @@
 # handoff · MTV Converter（mtvconverter）
 
-> **最后更新：2026-11-17 11:43 — 文档整理：初始化 git repo（main）、重写 README 修正过期信息、清理散落构建 CSS；`.trash/` 17GB 旧备份待主人自行清倒。**
+> **最后更新：2026-11-17 11:55 — 按主人授权清空项目 `.trash/`：17G→223M（释放约 16.8G）；余 21 个 NAS 侧 `.smbdelete` 占位文件客户端删不掉，需重挂 SMB 卷清理。**
 > 规则见 `AGENTS.md` §0：**接手必读本文件，每完成一步工作必须立即更新本文件**。
 
 ## 一、当前状态
@@ -18,7 +18,7 @@
 1. **等主人真机测试**（已装 `/Applications/MTV Converter.app`）：重点看非单轨确认、歌词烧录、预览切轨、取消与断点续跑。
 2. 用真实 MV 补跑 A-01~A-08 人工验收（画质 / 压缩比 / 分离质量 / 主观试听）。
 3. 配置 `CSC_LINK` / 公证环境变量后生成签名 dmg；在 Windows 机器上产出 NSIS 安装包（需同步放置含 nvenc 的 `ffmpeg.exe` 到 `resources/bin`）。
-4. **（主人决定）清倒项目根 `.trash/` 约 17GB**：51 份 `MTV Converter.app` 旧打包备份 + 少量 LICENSE，已被 `.gitignore` 排除、不影响 git；按约定由主人在访达操作，Agent 不擅自永久删除。
+4. **（主人决定）清掉 `.trash/` 剩余的 21 个 `.smbdelete` 占位目录（223M）**：需重挂 SMB 卷或重启 NAS；客户端已试 `chflags nohidden` + `rm` + `mv` 全部失败（见 §五）。不影响 git，可暂缓。
 
 ## 安装记录（本机）
 
@@ -61,6 +61,8 @@
 | `src/main/index.ts` | 依赖注入组装与窗口入口 |
 
 ## 五、踩过的坑（补充）
+
+- **SMB 卷上批量删 `.app` 会留 `.smbdelete` 占位文件，客户端删不掉**（2026-11-17 清 `.trash/` 17G 时实测）：`rm -rf .trash/*` 首轮因超时被中断后，21 个目录各残留一个 `.smbdeleteAAA4b5d4.4`（时间戳停在 11-12，是历史遗留的删除占位），报 **Resource busy** 但 `lsof` 查无本机占用 → 锁在 NAS 的 SMB 层。已试：① `chflags nohidden` 后 `rm`（标志来自 NAS 端，删后即刻恢复）；② 同目录 `mv` 改名（报 `Input/output error (os error 5)`）均失败。**结论**：客户端无解，需重挂 SMB 卷或重启 NAS 才能清；`rm -rf` 首轮已释放 16.8G，余 223M 不影响 git。教训：SMB 上批量删大目录要用后台任务 + 分批，避免首轮超时中断留占位。
 
 - **本机 brew 的 FFmpeg 8.1 构建未启用 libass**（`brew deps ffmpeg` 已不含 libass/freetype/harfbuzz）。改用随包 arm64 静态构建（osxexperts FFmpeg 7.1，`resources/bin`），`subtitles` 与 `ass` 滤镜均可用，实测中文烧录成功。
 - **FFmpeg 7.1 的 MP4 muxer 忽略 `-metadata:s:a:N title=`**，只写 `handler_name`（8.1 写 `udta/name`，ffprobe 读作 `tags.name`）。`encodeMux` 现同时写 `title` 与 `handler_name`，`titleOf()` 兼容 `title / name / handler_name` 三处。
