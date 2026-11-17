@@ -1,0 +1,27 @@
+# 依赖与构建产物（build/ 内含打包必需的 entitlements.mac.plist，不忽略）
+node_modules/
+dist/
+release/
+*.tsbuildinfo
+
+# 本机状态与撤销备份（.trash/ 含旧 .app 打包备份，约 17 GB）
+.DS_Store
+.trash/
+*.log
+
+# 私有配置与密钥
+.env
+
+# 测试素材与转换产物（体积大、含版权 MV，不入库）
+testdata/
+output/
+coverage/
+
+# 随包二进制 / 模型 / 字体（按清单按需下载，见 resources/manifest.json）
+resources/bin/
+resources/models/
+resources/fonts/
+!resources/manifest.json
+
+# 散落在仓库根目录的构建 CSS（如 index-uxSyr7m_.css）
+/index-*.css

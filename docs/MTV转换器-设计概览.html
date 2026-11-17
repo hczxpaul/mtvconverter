@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTV Converter · 设计文档可视化评审稿 v1.3</title>
+<style>
+:root{
+  --bg:#F6F7F9; --surface:#FFFFFF; --surface-2:#FBFCFE; --border:#D7DFEA;
+  --text:#16181D; --muted:#5B6472; --primary:#3173C4; --accent:#1C75E3;
+  --ok:#16794A; --ok-bg:#E7F5ED; --warn:#96620B; --warn-bg:#FEF4DC;
+  --err:#B4232C; --err-bg:#FDECEC; --info:#1C5DA8; --info-bg:#EAF2FC;
+  --shadow:0 1px 2px rgba(22,24,29,.05),0 8px 24px rgba(22,24,29,.05);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 80px}
+header.hero{background:linear-gradient(135deg,#FFFFFF 0%,#EEF3FB 100%);
+  border-bottom:1px solid var(--border);padding:44px 0 36px;margin-bottom:0}
+.hero-in{max-width:1180px;margin:0 auto;padding:0 28px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--primary);font-weight:700}
+h1{font-size:31px;line-height:1.25;margin:10px 0 10px;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:15px;max-width:860px;margin:0}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.badge{background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  padding:5px 12px;font-size:12px;color:var(--muted)}
+.badge b{color:var(--text)}
+.badge.new{border-color:#A9C7EC;background:#EAF2FC}
+nav.toc{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--border);margin-bottom:32px}
+.toc-in{max-width:1180px;margin:0 auto;padding:10px 28px;display:flex;gap:6px;flex-wrap:wrap}
+.toc a{color:var(--muted);text-decoration:none;font-size:12.5px;padding:5px 10px;border-radius:6px}
+.toc a:hover{background:var(--info-bg);color:var(--info)}
+section{margin:0 0 36px;scroll-margin-top:64px}
+h2{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+h2 .num{color:var(--primary);font-variant-numeric:tabular-nums;margin-right:9px;font-size:16px}
+.lead{color:var(--muted);margin:0 0 16px;font-size:13.5px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:20px 22px;box-shadow:var(--shadow)}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.kpi .t{font-size:11.5px;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;font-weight:600}
+.kpi .v{font-size:22px;font-weight:700;margin:6px 0 2px;letter-spacing:-.02em}
+.kpi .d{font-size:12px;color:var(--muted)}
+.kpi .v.ok{color:var(--ok)}
+.kpi .v.info{color:var(--info)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);font-weight:700;padding:10px 12px;border-bottom:1px solid var(--border);
+  background:var(--surface-2)}
+td{padding:11px 12px;border-bottom:1px solid #EDF0F5;vertical-align:top}
+tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+  background:#F0F3F8;border:1px solid #E3E9F2;border-radius:4px;padding:1px 5px;color:#243B5A}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.tag.err{background:var(--err-bg);color:var(--err)}
+.tag.info{background:var(--info-bg);color:var(--info)}
+.tag.gray{background:#EEF1F5;color:var(--muted)}
+.note{border-left:3px solid var(--primary);background:var(--info-bg);
+  padding:12px 16px;border-radius:0 8px 8px 0;font-size:13px;color:#203B5C;margin-top:14px}
+.note.warn{border-color:#D89A22;background:var(--warn-bg);color:#6B4A0B}
+.note.err{border-color:#C0392B;background:var(--err-bg);color:#7A2126}
+.note b{font-weight:700}
+del{color:#9AA3AF}
+.flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}
+.node{flex:1 1 112px;min-width:108px;background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+.node .s{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.06em}
+.node .n{font-size:13.5px;font-weight:700;margin:5px 0 3px}
+.node .m{font-size:11px;color:var(--muted);line-height:1.45}
+.node.hi{border-color:#9EC0EB;background:#F4F8FE}
+.node.key{border-color:#7FA6D8;background:#EAF2FC}
+.node.opt{border-style:dashed;background:var(--surface-2)}
+.arrow{align-self:center;color:#9AA7B8;font-size:16px;flex:0 0 auto}
+.bar{height:7px;background:#EAEFF6;border-radius:99px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--primary);border-radius:99px}
+.bar i.alt{background:#8AA9D6}
+.tracks{display:grid;grid-template-columns:1fr 42px 1fr;gap:12px;align-items:center}
+.tstack{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.tstack h3{margin:0 0 12px;font-size:13px;color:var(--muted);font-weight:700}
+.tr{border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin-bottom:9px;display:flex;
+  justify-content:space-between;align-items:center;gap:8px}
+.tr:last-child{margin-bottom:0}
+.tr .lab{font-weight:700;font-size:13px}
+.tr .meta{font-size:11.5px;color:var(--muted);text-align:right}
+.tr.v{background:#F3F7FD;border-color:#C9DCF3}
+.tr.a0{background:#FDECEC;border-color:#F0C2C2}
+.tr.a1{background:#E7F5ED;border-color:#BFE3CE}
+.bigarrow{text-align:center;color:var(--primary);font-size:24px;font-weight:700}
+.branch{border-top:3px solid var(--primary)}
+.branch.warn{border-top-color:#D89A22}
+.branch.err{border-top-color:#C0392B}
+.branch h3{margin:0 0 6px;font-size:14.5px}
+.branch p{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+.branch ul{margin:0;padding-left:18px;font-size:12.5px;color:var(--muted)}
+.branch ul li{margin-bottom:3px}
+.wire{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.wire .top{background:#F0F4FA;border-bottom:1px solid var(--border);padding:9px 14px;
+  font-size:11.5px;color:var(--muted);display:flex;gap:14px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.wire .body{display:grid;grid-template-columns:180px 1fr 300px;min-height:360px}
+.wire .side{background:var(--surface-2);border-right:1px solid var(--border);padding:16px 12px;font-size:12.5px}
+.wire .side div{padding:7px 10px;border-radius:6px;color:var(--muted);margin-bottom:3px}
+.wire .side div.on{background:#E6EFFC;color:var(--info);font-weight:700}
+.wire .main{padding:16px}
+.wire .preview{background:#F7FAFE;border-left:1px solid var(--border);padding:16px}
+.wbox{border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:11px;background:var(--surface)}
+.wbox .h{font-size:12.5px;font-weight:700;margin-bottom:8px;color:var(--text)}
+.wbox .h span{font-size:11px;color:var(--muted);font-weight:500}
+.drop{border:1.5px dashed #AFC2DC;background:#F7FAFE;border-radius:8px;padding:10px;text-align:center;
+  font-size:12px;color:var(--muted);margin-bottom:9px}
+.pill{display:inline-block;font-size:11.5px;border:1px solid var(--border);border-radius:6px;
+  padding:3px 9px;margin:0 6px 6px 0;background:var(--surface-2);color:var(--muted)}
+.pill.on{background:#E6EFFC;border-color:#A9C7EC;color:var(--info);font-weight:700}
+.prog{background:#EAEFF6;border-radius:99px;height:8px;overflow:hidden;margin:8px 0 4px}
+.prog i{display:block;width:62%;height:100%;background:var(--primary)}
+.checks{display:flex;gap:8px;flex-wrap:wrap;font-size:11.5px}
+.checks span{background:var(--ok-bg);color:var(--ok);border-radius:6px;padding:3px 9px;font-weight:600}
+.screen{background:#1B2230;border-radius:8px;height:126px;display:flex;align-items:center;
+  justify-content:center;color:#B9C7DC;font-size:12px;position:relative}
+.screen .badge{position:absolute;right:8px;top:8px;background:rgba(255,255,255,.14);
+  color:#E9F0FA;border:none;font-size:10px;padding:2px 7px}
+.ctrl{display:flex;gap:6px;align-items:center;margin-top:9px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.ctrl select{font-size:11.5px;border:1px solid var(--border);border-radius:5px;padding:3px 6px;background:#fff;color:var(--text)}
+.timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.phase{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.phase .p{font-size:11px;color:var(--primary);font-weight:800;letter-spacing:.06em}
+.phase h3{font-size:14px;margin:5px 0 8px}
+.phase p{font-size:12px;color:var(--muted);margin:0 0 10px}
+.phase .gate{font-size:11.5px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:7px;padding:8px 10px;color:var(--muted)}
+footer{border-top:1px solid var(--border);padding-top:18px;color:var(--muted);font-size:12px}
+footer b{color:var(--text)}
+.src{font-size:12px;color:var(--muted);line-height:1.8}
+@media(max-width:1000px){.wire .body{grid-template-columns:160px 1fr}.wire .preview{grid-column:1/-1;border-left:none;border-top:1px solid var(--border)}}
+@media(max-width:900px){.g4,.g3,.g2,.timeline{grid-template-columns:1fr 1fr}.tracks{grid-template-columns:1fr}.bigarrow{transform:rotate(90deg)}.wire .body{grid-template-columns:1fr}.wire .side{display:none}}
+@media(max-width:600px){.g4,.g3,.g2,.timeline{grid-template-columns:1fr}.wrap,.hero-in,.toc-in{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-in">
+    <div class="eyebrow">Design Review · v1.3 · 2026-11-12</div>
+    <h1>MTV Converter 设计文档可视化评审稿</h1>
+    <p class="sub">把仅含原唱音轨的 MV / 现场 live 视频，转换为<b>原分辨率 H.265 压缩视频</b> + 双音轨（a:0 原唱、a:1 伴奏）的 MTV 文件；可选联网取词并烧录字幕；应用内预览播放器可选择音轨。<b>主页面极简，歌词以默认折叠区常驻首页。</b>本页为设计文档可视化摘要，<b>不是产品实现代码</b>；完整规格见同目录 Markdown 文档。</p>
+    <div class="badges">
+      <span class="badge new"><b>歌词区在首页（默认折叠）· 首屏 7 控件</b></span>
+      <span class="badge new"><b>一律 H.265 / 原分辨率 / 压缩体积</b></span>
+      <span class="badge new"><b>应用内预览 + 音轨切换</b></span>
+      <span class="badge">分离 <b>UVR5.6 或导入官方伴奏</b></span>
+      <span class="badge">输出 <b>MP4(hvc1) · .mtv</b></span>
+      <span class="badge">点歌系统 <b>自动识别，无需适配</b></span>
+      <span class="badge">用途 <b>个人自用 · 允许联网</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="toc-in">
+  <a href="#s1">目标</a><a href="#s2">数据流</a><a href="#s3">音轨契约</a>
+  <a href="#s4">管线阶段</a><a href="#s5">歌词三分支</a><a href="#s6">硬件与回退</a>
+  <a href="#s7">界面</a><a href="#s7lyrics">歌词（首页）</a><a href="#s8">预览播放器</a><a href="#s9">验收</a>
+  <a href="#s10">计划</a><a href="#s11">风险</a>
+</div></nav>
+
+<div class="wrap">
+
+<section id="s1">
+  <h2><span class="num">01</span>目标与硬指标</h2>
+  <p class="lead">主目标不依赖歌词：即使歌词完全不可用，也必须产出音画同步、HEVC 编码、音轨顺序正确的合法 MTV 文件。</p>
+  <div class="grid g4">
+    <div class="card kpi"><div class="t">音轨顺序</div><div class="v ok">a:0 → a:1</div><div class="d">原唱 → 伴奏，由 <code>-map</code> 顺序保证</div></div>
+    <div class="card kpi"><div class="t">视频编码</div><div class="v info">HEVC</div><div class="d">原分辨率、帧率、时长不变；一律重编码</div></div>
+    <div class="card kpi"><div class="t">体积压缩</div><div class="v">≤ 60%</div><div class="d">默认均衡档目标，实测校准；报告给出实际压缩比</div></div>
+    <div class="card kpi"><div class="t">预览切轨</div><div class="v ok">不中断</div><div class="d">输入 / 输出均可播，a:0 ↔ a:1 切换</div></div>
+  </div>
+  <div class="note"><b>术语澄清：</b>「音轨 0 / 音轨 1」指音频流相对序号 <code>a:0</code> / <code>a:1</code>，不是容器全局 stream index。MTV 文件 = 满足输出契约的<b>标准视频</b>，点歌系统按内容自动识别，不是任何厂商私有容器。</div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02</span>端到端数据流（单次 H.265 编码）</h2>
+  <p class="lead">伴奏来源二选一，歌词分支并行且不阻断；字幕与转码在同一次编码中完成；预览走独立的本地代理支路。</p>
+  <div class="card">
+    <div class="flow">
+      <div class="node"><div class="s">INPUT</div><div class="n">MV / live 视频</div><div class="m">单一原唱音轨</div></div>
+      <div class="arrow">→</div>
+      <div class="node hi"><div class="s">PROBE</div><div class="n">ffprobe 探测</div><div class="m">音轨≠1 → 阻断确认</div></div>
+      <div class="arrow">→</div>
+      <div class="node hi"><div class="s">EXTRACT</div><div class="n">原唱 PCM</div><div class="m">统一规格 WAV</div></div>
+      <div class="arrow">→</div>
+      <div class="node key"><div class="s">ACCOMPANIMENT</div><div class="n">伴奏二选一</div><div class="m">UVR5.6 分离 <b>或</b> 导入官方伴奏</div></div>
+      <div class="arrow">→</div>
+      <div class="node hi"><div class="s">ALIGN</div><div class="n">采样级对齐</div><div class="m">裁剪 / 补齐至源时长</div></div>
+      <div class="arrow">→</div>
+      <div class="node key"><div class="s">ENCODE_MUX</div><div class="n">单次 H.265 编码</div><div class="m">原分辨率 · 压缩 · -map 双音轨 · 可选字幕</div></div>
+      <div class="arrow">→</div>
+      <div class="node hi"><div class="s">VALIDATE</div><div class="n">输出校验</div><div class="m">16 项硬断言 + 报告</div></div>
+    </div>
+    <div style="margin-top:16px;border-top:1px dashed var(--border);padding-top:14px">
+      <div class="flow" style="align-items:center">
+        <div class="node opt" style="flex:0 0 190px"><div class="s">PARALLEL · OPTIONAL</div><div class="n">歌曲链接 / ID</div><div class="m">允许联网 · 网易云单曲</div></div>
+        <div class="arrow">→</div>
+        <div class="node opt"><div class="s">LYRICS</div><div class="n">photix 歌词</div><div class="m">LRC 原文 / 翻译</div></div>
+        <div class="arrow">→</div>
+        <div class="node opt"><div class="s">CONVERT</div><div class="n">LRC/SRT → ASS</div><div class="m">时间轴 / 偏移 / 字体</div></div>
+        <div class="arrow">→</div>
+        <div class="node opt"><div class="s">JOIN</div><div class="n">汇入 ENCODE_MUX</div><div class="m">同一编码通道，无二次编码</div></div>
+      </div>
+      <div class="flow" style="align-items:center;margin-top:12px">
+        <div class="node opt" style="flex:0 0 190px"><div class="s">PREVIEW · 独立支路</div><div class="n">输入 / 输出文件</div><div class="m">可随时预览</div></div>
+        <div class="arrow">→</div>
+        <div class="node opt"><div class="s">PROXY</div><div class="n">本地 HLS 代理</div><div class="m">127.0.0.1 + token</div></div>
+        <div class="arrow">→</div>
+        <div class="node opt"><div class="s">TRANSCODE</div><div class="n">H.264 / AAC</div><div class="m">绕开 Chromium HEVC 限制</div></div>
+        <div class="arrow">→</div>
+        <div class="node opt"><div class="s">SWITCH</div><div class="n">a:0 / a:1 切轨</div><div class="m">不中断、进度不跳</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="note warn"><b>单次编码：</b>字幕滤镜并入 <code>ENCODE_MUX</code> 的同一次 H.265 编码，一次编码完成，画质损失最小、无二次编码。</div>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03</span>音轨顺序契约</h2>
+  <p class="lead">输入只有一条音轨；输出两条且编码规格完全一致，否则切换会爆音或出现静音间隙。</p>
+  <div class="tracks">
+    <div class="tstack">
+      <h3>输入 MV.mp4 · 480 MB</h3>
+      <div class="tr v"><div><div class="lab">视频流</div><div class="meta">H.264 · 1920×1080 · 30fps · 210.000s</div></div><span class="tag gray">流 0</span></div>
+      <div class="tr a0"><div><div class="lab">音轨 a:0 原唱</div><div class="meta">AAC · 48kHz · 立体声</div></div><span class="tag info">唯一音轨</span></div>
+    </div>
+    <div class="bigarrow">→</div>
+    <div class="tstack">
+      <h3>输出 MV.mtv · 目标 ≤ 288 MB</h3>
+      <div class="tr v"><div><div class="lab">视频流 H.265 / HEVC</div><div class="meta">1920×1080 原分辨率 · 30fps · 210.000s · hvc1</div></div><span class="tag info">重编码</span></div>
+      <div class="tr a0"><div><div class="lab">音轨 a:0 原唱</div><div class="meta">title=原唱 · language=zho · default</div></div><span class="tag err">①</span></div>
+      <div class="tr a1"><div><div class="lab">音轨 a:1 伴奏</div><div class="meta">title=伴奏 · language=zho · UVR 或导入</div></div><span class="tag ok">②</span></div>
+    </div>
+  </div>
+  <div class="note"><b>为什么原唱也要重新编码：</b>原唱轨由统一 PCM 与伴奏轨使用同一编码器参数生成，保证采样率 / 声道 / 起点一致。若直接复制源音轨，与 UVR 产物参数不一致，切换时可能爆音。<br><b>压缩档：</b>质量优先 CRF 22–24 / <b>均衡（默认）CRF 26–28</b> / 体积优先 CRF 30–32；软硬编码器参数需做画质对齐基准。源已是低码率 HEVC 时提示「二次编码可能无收益」。</div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04</span>阶段化管线与进度权重</h2>
+  <p class="lead">每阶段产出中间文件 + <code>.done</code> 标记，支持取消、断点续跑与单阶段重跑；取消必须终止整个子进程树（含预览代理）。</p>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:135px">阶段</th><th>职责</th><th style="width:64px">权重</th><th style="width:160px">进度</th><th style="width:120px">中间产物</th></tr></thead>
+      <tbody>
+        <tr><td><b>PROBE</b></td><td>探测流信息、体积、VFR / start_time / 旋转 / HDR；<b>音轨≠1 → 阻断确认</b></td><td>3%</td><td><div class="bar"><i style="width:3%"></i></div></td><td><code>probe.json</code></td></tr>
+        <tr><td><b>EXTRACT</b></td><td>提取 <code>0:a:0</code> 为统一 PCM 基准</td><td>4%</td><td><div class="bar"><i style="width:4%"></i></div></td><td><code>original.wav</code></td></tr>
+        <tr><td><b>LYRICS</b></td><td>并行可选分支；失败只写状态文件，不抛出</td><td>3%</td><td><div class="bar"><i class="alt" style="width:3%"></i></div></td><td><code>lyrics.ass</code></td></tr>
+        <tr><td><b>ACCOMPANIMENT</b></td><td><b>二选一</b>：UVR5.6 分离 / 导入官方伴奏（跳过分离，权重转移给编码）</td><td>40%</td><td><div class="bar"><i style="width:40%"></i></div></td><td><code>inst.raw.wav</code></td></tr>
+        <tr><td><b>ALIGN</b></td><td>重采样、声道统一、精确裁剪 / 补齐、削波检查</td><td>5%</td><td><div class="bar"><i style="width:5%"></i></div></td><td><code>instrumental.wav</code></td></tr>
+        <tr><td><b>ENCODE_MUX</b></td><td><b>单次 H.265 编码 + 压缩</b> + 可选 libass 字幕 + 显式 -map 双音轨封装</td><td>40%</td><td><div class="bar"><i style="width:40%"></i></div></td><td><code>output.mtv</code></td></tr>
+        <tr><td><b>VALIDATE</b></td><td>16 项硬断言 + 报告；不通过不得标记成功</td><td>5%</td><td><div class="bar"><i style="width:5%"></i></div></td><td><code>report.json</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05</span>歌词三种分支：结果必须等价</h2>
+  <p class="lead">允许联网取词；歌词服务为站点内部 server route（无公开文档、无 SLA），页面声明「仅供个人学习交流」与「个人自用」一致。所有失败都降级为合法无字幕 H.265 双音轨文件。</p>
+  <div class="grid g3">
+    <div class="card branch err">
+      <h3>① 获取失败 <span class="tag err">UNAVAILABLE</span></h3>
+      <p>超时 / 5xx / 业务码 400 / 非 JSON / 契约变更 / 非网易云链接。</p>
+      <ul><li>超时 5–8s，最多 2 次退避重试</li><li>业务错误以 <b>HTTP 200 + <code>code=400</code></b> 承载，必须解析 body</li><li>Content-Type 在 text/html 与 application/json 间不一致</li><li>UI：状态行一行「未找到歌词，已生成无字幕版本」；重试 / 导入在首页歌词区（展开后），无横幅</li></ul>
+    </div>
+    <div class="card branch warn">
+      <h3>② 歌词为空 <span class="tag warn">EMPTY</span></h3>
+      <p>纯音乐、未收录、仅有「作词 / 作曲」元信息行。</p>
+      <ul><li>哨兵 <code>[00:00.00]暂无歌词</code> 与 <code>uncollected=true</code></li><li><code>klyric</code> 逐字歌词实测常为空，不可依赖</li><li>UI：状态行一行「这首歌没有歌词」；无告警卡</li><li><b>输出仍为合法双音轨 MTV</b></li></ul>
+    </div>
+    <div class="card branch">
+      <h3>③ 关闭烧录 <span class="tag gray">OFF</span></h3>
+      <p>用户主动关闭，或取回歌词仅用于预览。</p>
+      <ul><li>跳过字幕分支（可仅预览不写字幕）</li><li>可选附带外挂 <code>.lrc</code> 侧车文件</li><li>不额外生成软字幕轨，避免双份歌词</li><li><b>输出仍为合法双音轨 MTV</b></li></ul>
+    </div>
+  </div>
+  <div class="note warn"><b>成功 + 开启时：</b>字幕并入 <code>ENCODE_MUX</code> 的同一次 H.265 编码。烧录为不可逆操作，需二次确认；个人自用与站点声明一致，商业分发不在本期范围。UVR 模型按官方 README 要求保留署名。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06</span>硬件加速矩阵与无加速回退</h2>
+  <p class="lead">分离后端只决定加载与推理耗时，编码后端独立决策：Windows NVIDIA 最低 GTX 1060 6GB（建议 ≥8GB）；Apple Silicon 上 MDX-Net 走 ONNX，因 CoreML EP 不支持该计算图而固定用 CPU EP。H.265 主编码与预览代理各有一条后端链。</p>
+  <div class="card">
+    <table>
+      <thead><tr><th>平台 / 设备</th><th>分离后端（MDX-Net）</th><th>主编码（H.265）</th><th>预览代理（H.264）</th></tr></thead>
+      <tbody>
+        <tr><td><b>Windows + NVIDIA</b></td><td><span class="tag info">ONNX CUDA EP（可用时）</span></td><td><code>hevc_nvenc</code></td><td><code>h264_nvenc</code></td></tr>
+        <tr><td><b>Windows + AMD / Intel</b></td><td><span class="tag warn">DirectML（可用时）/ CPU EP</span></td><td>平台 HEVC 硬编 / <code>libx265</code></td><td><code>libx264</code></td></tr>
+        <tr><td><b>macOS Apple Silicon</b></td><td><span class="tag gray">CPU EP（CoreML 不支持 MDX 图）</span></td><td><code>hevc_videotoolbox</code></td><td><code>h264_videotoolbox</code></td></tr>
+        <tr><td><b>macOS Intel / 无 GPU / OOM</b></td><td><span class="tag gray">CPU EP</span></td><td><code>libx265</code></td><td><code>libx264</code> veryfast</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="card"><div class="t" style="font-size:11px;color:var(--muted);font-weight:700">STEP 1</div><h3 style="font-size:14px;margin:6px 0">探测 + 自检</h3><p style="font-size:12px;color:var(--muted);margin:0">平台 → 架构 → 设备 → 驱动 → 显存 → 模型兼容 → <b>HEVC 编码器 1s 自检</b></p></div>
+    <div class="card"><div class="t" style="font-size:11px;color:var(--muted);font-weight:700">STEP 2</div><h3 style="font-size:14px;margin:6px 0">降级一次</h3><p style="font-size:12px;color:var(--muted);margin:0">状态行「使用 CPU 模式 ⓘ」；原因码与耗时进详情，<b>无横幅</b></p></div>
+    <div class="card"><div class="t" style="font-size:11px;color:var(--muted);font-weight:700">STEP 3</div><h3 style="font-size:14px;margin:6px 0">CPU 保守化</h3><p style="font-size:12px;color:var(--muted);margin:0">单任务、调小 segment、libx265 快 preset、<b>不跳过 H.265 转码</b></p></div>
+    <div class="card"><div class="t" style="font-size:11px;color:var(--muted);font-weight:700">STEP 4</div><h3 style="font-size:14px;margin:6px 0">用户可控</h3><p style="font-size:12px;color:var(--muted);margin:0">后台排队、换压缩档、预览代理降码率；恢复 GPU 后按阶段重跑</p></div>
+  </div>
+  <div class="note warn"><b>最大新风险：</b>CPU 回退下 <code>libx265</code> 在 1080p 长视频上极慢。方案不跳过转码（FR-07 为硬需求），而是给出预计耗时、允许后台排队与体积优先档，并在 P0 spike 实测绘出耗时基准。</div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07</span>界面结构与配置（设计系统）</h2>
+  <p class="lead">界面采用极简单一主路径 + 渐进披露（UX-074 / UX-028 / UX-054）：任务表格、状态卡、报告、阶段条置于「详情 / 日志」；<b>歌词区在首页</b>（第一张线框的折叠行，第二张为展开后配置）。</p>
+  <div class="wire">
+    <div class="top"><span><i class="dot" style="background:#C0392B"></i><i class="dot" style="background:#D89A22"></i><i class="dot" style="background:#16794A"></i></span>
+      <span>MTV Converter</span><span style="margin-left:auto">[设置]</span><span>[更多 ▾]</span></div>
+    <div class="body" style="grid-template-columns:1fr;min-height:300px">
+      <div class="main" style="padding:26px 32px">
+        <div class="drop" style="padding:20px;font-size:13px">把 MV 拖到这里　·　或 [ 选择视频 ]</div>
+        <div style="display:grid;grid-template-columns:150px 1fr;gap:12px;margin-bottom:18px">
+          <div class="wbox" style="margin:0"><div class="h">MV.mp4</div><div style="font-size:11.5px;color:var(--muted)">03:30</div></div>
+          <div class="wbox" style="margin:0"><div class="h">预览 <span>· 音轨 [ 原唱 ▾ ]</span></div>
+            <div class="screen" style="height:92px">[ 预览画面 ]</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:7px">▶ ────●──── 01:12 / 03:30　·　输入 / 输出切换</div></div>
+        </div>
+        <div class="wbox" style="margin:0 0 18px;padding:9px 12px;background:var(--surface-2)">
+          <div class="h" style="margin:0;font-size:12px">歌词（可选） ▸ <span>· 默认折叠，点开即展开完整配置（§7.9）</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">展开后：歌曲链接 / ID · 版本 · 偏移 · 时间轴预览 · 烧录开关</div>
+        </div>
+        <div style="text-align:center;margin:16px 0 20px"><span class="pill on" style="font-size:13px;padding:8px 24px">开始转换</span></div>
+        <div style="border-top:1px solid var(--border);padding-top:13px;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap">
+          <span>正在生成伴奏…</span><div class="prog" style="flex:1;margin:0;min-width:90px"><i style="width:45%"></i></div><span>[取消]</span><span>[详情]</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:9px">完成态：完成 · 198 MB　[打开所在目录] [预览输出]</div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><b>首屏 7 个控件：</b>拖拽区 / 选择视频 / 预览 / 音轨下拉 / <b>歌词折叠区</b> / 开始转换 / 详情。歌词区收起时不出现技术术语；状态行单行，无侧栏、无阶段条、无校验勾选项、无持久横幅。</div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card">
+      <h3 style="font-size:14px;margin:0 0 10px">复杂度去哪了</h3>
+      <table><tbody>
+        <tr><td><b>L0 主页面</b></td><td>文件 / 时长 / 预览 / 音轨（原唱、伴奏）/ 开始 / 结果</td></tr>
+        <tr><td><b>L1 状态行</b></td><td>一句人话 + 进度条 + 取消；「未找到歌词，已生成无字幕版本」「使用 CPU 模式 ⓘ」</td></tr>
+        <tr><td><b>L2 详情</b></td><td>阶段、编码后端、压缩比、伴奏来源、降级原因、错误码、校验报告、日志</td></tr>
+        <tr><td><b>L3 打断</b></td><td>仅两类：非单轨确认、烧录不可逆确认</td></tr>
+        <tr><td><b>首页歌词区</b></td><td>歌词链接 / 版本 / 偏移 / 时间轴预览 / 字幕样式 / 烧录，常驻可见、默认折叠</td></tr>
+        <tr><td><b>更多设置</b></td><td>伴奏来源、压缩档、容器、并发等，默认收起</td></tr>
+      </tbody></table>
+    </div>
+    <div class="card">
+      <h3 style="font-size:14px;margin:0 0 10px">可观测性与回滚</h3>
+      <table><tbody>
+        <tr><td><span class="tag ok">基线</span></td><td>全部 V/A 技术验收项、错误体系、结构化日志、断点续跑</td></tr>
+        <tr><td><span class="tag info">约束</span></td><td>「不静默降级」= 信息可达 + 日志留痕 + 一键展开</td></tr>
+        <tr><td><span class="tag warn">风险</span></td><td>高级项 / 降级原因不易被发现 → 「详细模式」一键恢复完整信息密度</td></tr>
+        <tr><td><span class="tag ok">验收</span></td><td>V-17 首屏 ≤ 7 控件 · V-18 零技术术语（歌词区收起时） · V-19 L2 事件均有留痕 · V-20 首页歌词区四态 · A-08 首次使用 100% 完成</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <h3 style="font-size:15px;margin:24px 0 4px">首页歌词区 · 展开后</h3>
+  <p class="lead" style="margin-bottom:12px">首页「歌词（可选）▸」<b>点开后原地下拉展开</b>，收起即保存配置。四态、三分支、烧录确认不变。</p>
+  <div class="wire" id="s7lyrics">
+    <div class="top"><span>首页 · 歌词（可选）▸ 展开</span><span style="margin-left:auto">歌词配置　[收起]</span></div>
+    <div class="body" style="grid-template-columns:1fr;min-height:auto">
+      <div class="main" style="padding:18px">
+        <div class="wbox">
+          <div class="h">[ 开关 ] 为这个视频添加歌词 <span>· 默认关闭，关时下面全部收起</span></div>
+          <div style="font-size:11.5px;color:var(--muted)">收起时首页只剩一行；收起即保存配置、不启动转换</div>
+        </div>
+        <div class="wbox">
+          <div class="h">① 从哪拿歌词</div>
+          <span class="pill on">歌曲链接 / ID</span><span class="pill">本地 .lrc / .srt</span><span class="pill">手动粘贴</span>
+          <div class="drop" style="margin-top:8px;padding:9px">粘贴网易云单曲链接或数字 ID　[ 获取歌词 ]</div>
+          <div style="font-size:11.5px;color:var(--muted)">状态：已获取 18 句　/　没拿到歌词，可重试或导入　/　这首歌没有歌词</div>
+        </div>
+        <div class="wbox">
+          <div class="h">② 歌词内容 <span>· 点某行跳到预览播放器对应时刻</span></div>
+          <span class="pill on">双语</span><span class="pill">偏移 0 ms</span><span class="pill">预览对齐</span>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:6px">00:05.648　无人知晓 …　｜　00:11.930　无数面孔闪回脑海 …</div>
+        </div>
+        <div class="wbox">
+          <div class="h">③ 字幕样式 <span>· 默认折叠</span></div>
+          <span class="pill">字体</span><span class="pill">字号</span><span class="pill">描边</span><span class="pill">位置</span><span class="pill">双语行数</span>
+          <div style="font-size:11.5px;color:var(--warn);background:var(--warn-bg);border-radius:6px;padding:8px 10px;margin-top:6px">[ ] 把歌词烧进画面（不可逆，勾选时一次确认）　·　默认关闭</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">歌词仅供个人学习交流；展开区内的状态与失败仍按一行平实文案（L1）呈现</div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3 style="font-size:14px;margin:0 0 10px">四种状态：首页歌词区 / 主页面状态行 / 输出（对应原始需求三分支）</h3>
+    <table>
+      <thead><tr><th>状态</th><th>首页歌词区内</th><th>主页面状态行</th><th>输出文件</th></tr></thead>
+      <tbody>
+        <tr><td><b>获取失败</b></td><td>一行「没拿到歌词，可重试或导入本地文件」+ 重试 / 导入 / 粘贴</td><td>「未找到歌词，已生成无字幕版本」</td><td>合法无字幕 H.265 双音轨 MTV</td></tr>
+        <tr><td><b>歌词为空</b></td><td>一行「这首歌没有歌词」；烧录开关禁用</td><td>「这首歌没有歌词」</td><td>同上</td></tr>
+        <tr><td><b>关闭烧录</b></td><td>歌词仍可预览，可选导出外挂 .lrc</td><td>无提示</td><td>同上；无字幕轨</td></tr>
+        <tr><td><b>成功 + 开启</b></td><td>句数、时间轴预览、样式；勾选时一次不可逆确认</td><td>无提示</td><td>带烧录字幕的双音轨 MTV</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>三种「无字幕」输出完全等价</b>，不因歌词问题产生损坏文件、缺失音轨、时长变化或任务失败。约束：仅网易云单曲链接 / 数字 ID；个人自用；逐字高亮需逐字时间戳（P2）；字幕滤镜并入同一次 H.265 编码。</div>
+  </div>
+  <div class="note"><b>形态开关：</b>歌词区默认折叠、一行可见；「默认展开」开关可切换为首页常驻全展开，此时首屏控件 > 10，需放宽 NFR-15 并重跑 V-17/V-18。</div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08</span>预览播放器：为什么需要代理</h2>
+  <p class="lead">Chromium 官方把 H.265/HEVC 列为专有编解码器，「限于 Chrome 且需硬件支持」；Electron ≥ v20 可通过 <code>PlatformHEVCDecoderSupport</code> 启用 HEVC 硬解，软解需自编译打补丁的 Chromium/Electron。因此把输出 H.265 文件直接塞进 <code>&lt;video&gt;</code> 不可靠。</p>
+  <div class="grid g3">
+    <div class="card branch"><h3>方案 A · 本地 HLS 多音轨代理 <span class="tag ok">推荐 P1</span></h3><p>FFmpeg 实时转 H.264/AAC HLS，master playlist 含两条 audio rendition；本地服务经 127.0.0.1 + token 提供，客户端切音轨。</p><ul><li>跨平台一致、切轨不中断、可寻址</li><li>绕开 HEVC 解码限制</li><li>依据：Chromium 媒体架构实践 + 已有 KTV 项目 HLS 多音轨切轨</li><li>风险：额外转码开销，需与主管线错峰</li></ul></div>
+    <div class="card branch warn"><h3>方案 B · 直解 + 兜底 <span class="tag warn">P0 降级</span></h3><p>先尝试 HEVC 硬解直接播放；失败则生成单音轨 H.264 代理（切轨重开）或调用系统播放器。</p><ul><li>实现最简、可无本地服务</li><li>硬解依赖系统 HEVC 解码器</li><li>切轨会中断、进度可能跳</li><li>适合 P0 验证与 A 失败时兜底</li></ul></div>
+    <div class="card branch err"><h3>方案 C · 自编译打补丁 Electron <span class="tag err">不采用</span></h3><p>给 Chromium 打 HEVC 软解补丁，实现应用内原生播放。</p><ul><li>每个 Electron 版本需重编译</li><li>构建与维护成本高、体积大</li><li>仅登记为长期备选</li></ul></div>
+  </div>
+  <div class="note"><b>安全与生命周期：</b>只绑 <code>127.0.0.1</code> + 随机端口 + 一次性 token；URL 不含绝对路径；切换预览对象、关闭页面、任务完成 / 取消时停止子进程并清理切片；空闲 TTL 自动回收。<b>必须用 127.0.0.1 而非 localhost</b>——本机实测 <code>localhost</code> 解析到 <code>::1</code> 时会出现「连上即被 RST」。<br><b>验收：</b>V-16 切轨 10 次不中断、进度偏移 ≤ 200ms；A-06 输入 / 输出均可播且无残留转码进程。</div>
+</section>
+
+<section id="s9">
+  <h2><span class="num">09</span>输出校验与验收标准</h2>
+  <p class="lead">自动硬断言 V-01~V-20 + 人工验收 A-01~A-08；任一硬断言失败，文件保留但不得标记为成功（V-13 压缩未达标可配置为「提示」而非失败）。</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="font-size:14px;margin:0 0 10px">自动硬断言</h3>
+      <table>
+        <tbody>
+          <tr><td><b>V-01/02</b></td><td>音频流恰好 2 条；<code>a:0</code> 原唱且波形与源互相关 ≥ 0.99；<code>a:1</code> 为伴奏</td><td><span class="tag ok">自动</span></td></tr>
+          <tr><td><b>V-05 / V-12</b></td><td><b>codec_name=hevc</b>；宽高 / SAR / 旋转 / 帧率 / 时长与源一致；MP4 写 hvc1</td><td><span class="tag ok">自动</span></td></tr>
+          <tr><td><b>V-06</b></td><td><b>PSNR ≥ 38dB 或 VMAF ≥ 93</b>；烧录时差异限于字幕区</td><td><span class="tag ok">自动</span></td></tr>
+          <tr><td><b>V-13</b></td><td><b>默认档体积 ≤ 源 60%</b>；源已低码率 HEVC 时「不显著增大」</td><td><span class="tag info">报告</span></td></tr>
+          <tr><td><b>V-14/15</b></td><td>伴奏来源标记与实际一致；非单轨输入不会自动产出文件</td><td><span class="tag ok">自动</span></td></tr>
+          <tr><td><b>V-16</b></td><td><b>预览可切 a:0/a:1</b>，切换 10 次不中断、进度偏移 ≤ 200ms</td><td><span class="tag info">自动+人工</span></td></tr>
+          <tr><td><b>V-17/18/19</b></td><td><b>界面简洁度</b>：首屏 ≤ 7 控件、零技术术语（歌词区收起时）、L2 事件均有详情与日志留痕</td><td><span class="tag ok">自动</span></td></tr>
+          <tr><td><b>V-20</b></td><td><b>首页歌词区四态</b>：常驻可见、默认折叠、展开即 §7.9 面板；四态可展开与收起；三种无字幕输出等价；烧录勾选触发且仅触发一次确认</td><td><span class="tag info">自动+人工</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="font-size:14px;margin:0 0 10px">人工验收</h3>
+      <table>
+        <tbody>
+          <tr><td><b>A-01 切换</b></td><td>播放中切换 <code>a:0 ↔ a:1</code>，进度不跳、无爆音 / 静音间隙</td></tr>
+          <tr><td><b>A-02 质量</b></td><td>伴奏无严重残留人声 / 伪影 / 削波；live 允许「建议复核」</td></tr>
+          <tr><td><b>A-03 歌词</b></td><td>字幕随演唱出现、中文无乱码、偏差在设定偏移 ±120ms 内</td></tr>
+          <tr><td><b>A-04 画面</b></td><td><b>H.265 重编码后</b>与原片无明显可见劣化，无方向 / 色彩变化</td></tr>
+          <tr><td><b>A-06 预览</b></td><td>输入 / 输出均可播，音轨下拉可切换，代理退出后无残留进程</td></tr>
+          <tr><td><b>A-07 报告</b></td><td>压缩比 / 编码后端 / 伴奏来源 / 压缩档与实测一致</td></tr>
+          <tr><td><b>A-08 首次使用</b></td><td>5 名从未见过本工具的用户，无说明情况下完成「导入 → 转换 → 切到伴奏预览」；首次完成率 100%</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:12px">基线用例：C-01 无歌词 · C-02 烧录 · C-03 失败/空 · C-04 关闭 · C-05 live · C-06 CPU 回退 · <b>C-07 导入官方伴奏</b> · <b>C-08 多轨确认</b> · <b>C-09 预览切轨</b> · C-10 源已 HEVC。</div>
+    </div>
+  </div>
+</section>
+
+<section id="s10">
+  <h2><span class="num">10</span>分阶段计划与验收门</h2>
+  <p class="lead">实施纪律：一次只变更一个变量，每步变更后立即重跑 V-01~V-20 与 A-01~A-08；实测与文档冲突时先更新文档再改实现。</p>
+  <div class="timeline">
+    <div class="phase"><div class="p">P0 · SPIKE</div><h3>技术验证</h3><p>H.265 单次编码 + 双音轨 + ffprobe 断言；软硬编码画质 / 体积基准与 CRF 映射；<b>预览可行性（HEVC 直解 / HLS 切轨）</b>；两平台 sidecar 与签名验证。</p><div class="gate"><b>门：</b>V-01~05/07/12/13 通过；预览方案 A 或 B 至少一条跑通</div></div>
+    <div class="phase"><div class="p">P1 · MVP α</div><h3>可发布主体</h3><p>Electron 分层骨架、UVR 集成、<b>导入官方伴奏</b>、<b>非单轨确认</b>、H.265 压缩档、硬件回退、进度 / 取消 / 断点续跑、错误与日志、校验报告、<b>基础预览播放器</b>、<b>极简主页面与提示分级</b>、双平台安装包。</p><div class="gate"><b>门：</b>C-01/06/08/09 在 4 种硬件配置跑通；A-01、A-06 通过</div></div>
+    <div class="phase"><div class="p">P2 · LYRICS + PREVIEW</div><h3>歌词与预览增强</h3><p>LyricsProvider（photix / 本地 / 粘贴）、三分支降级、LRC/SRT→ASS、<b>同一次 H.265 编码烧录</b>、<b>HLS 多音轨无缝切轨预览</b>、压缩档可视化对比。</p><div class="gate"><b>门：</b>C-02/03/04/09 全通过；三分支输出与 C-01 等价</div></div>
+    <div class="phase"><div class="p">P3 · HARDEN</div><h3>加固与扩展</h3><p>批量队列、逐字高亮（需逐字时间轴）、HDR / 10bit、自动更新、崩溃上报、性能基准、UI 可用性测试、许可文件复核。</p><div class="gate"><b>门：</b>§9 全部验收项 + NFR 达标 + 5 人可用性测试</div></div>
+  </div>
+</section>
+
+<section id="s11">
+  <h2><span class="num">11</span>风险登记</h2>
+  <div class="grid">
+    <div class="card">
+      <h3 style="font-size:14px;margin:0 0 10px">Top 风险</h3>
+      <table><tbody>
+        <tr><td><span class="tag err">高</span></td><td><b>CPU 模式 libx265 编码极慢</b> → 耗时预估、后台排队、体积优先档、预览错峰；P0 先实测基准；<b>不跳过转码</b></td></tr>
+        <tr><td><span class="tag warn">中</span></td><td><b>Chromium / Electron HEVC 解码受限</b> → 预览方案 A/B/C 分级，默认 HLS 代理</td></tr>
+        <tr><td><span class="tag warn">中</span></td><td><b>H.265 画质 / 压缩不达预期</b> → 画质硬断言 + 三档压缩 + 源已 HEVC 提示 + 报告实测比</td></tr>
+        <tr><td><span class="tag warn">中</span></td><td><b>歌词接口非公开、无 SLA</b> → 适配层 + 契约测试 + 本地导入 / 粘贴 / 关闭三路兜底</td></tr>
+        <tr><td><span class="tag warn">中</span></td><td><b>导入伴奏格式 / 时长 / 内容不匹配</b> → ffprobe + 互相关 + 时长差阈值 + 显式确认</td></tr>
+        <tr><td><span class="tag info">低</span></td><td><b>歌词版权</b>：个人自用与站点「仅供个人学习交流」一致 → 首次提示 + 烧录二次确认</td></tr>
+        <tr><td><span class="tag warn">中</span></td><td><b>极简导致信息不可达</b> → L2 详情抽屉 + 日志留痕校验 + 「详细模式」一键回滚</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <div class="note" style="margin-top:14px"><b>查证来源：</b>lyric.photix.cc 页面与 <code>/api/lyric</code> 只读实测；UVR v5.6 官方 README；Chromium 官方 Audio/Video 文档与 Electron HEVC 硬解资料；Electron 媒体流架构实践与 KTV 项目 HLS 多音轨切轨方案；KTV 双音轨行业约定；本地 UI/UX Pro Max 设计引擎；本机 <code>127.0.0.1</code> IPv6 踩坑记录。完整出处见 Markdown 文档附录 A。</div>
+</section>
+
+<footer>
+  <p><b>MTV Converter · 设计文档与开发方案 v1.3</b> ｜ 2026-11-12 ｜ 完整规格：<code>docs/MTV转换器-设计文档与开发方案.md</code></p>
+  <p class="src">本页为设计文档的可视化评审稿，不含产品实现代码。设计系统 token 为引擎推荐起点，对比度与可访问性须以真机 / 专用工具复核。</p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,45 @@
+appId: cc.photix.mtvconverter
+productName: MTV Converter
+copyright: Personal use only
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/main/**/*
+  - dist/renderer/**/*
+  - package.json
+  - THIRD_PARTY_NOTICES.md
+  # 渲染层依赖已由 Vite 打包进 dist/renderer，运行期只需 zod；排除测试与示例以缩小产物
+  - "!node_modules/**/{test,tests,__tests__,examples,example,docs}/**"
+  - "!node_modules/**/*.md"
+  - "!node_modules/**/*.map"
+extraResources:
+  - from: resources
+    to: resources
+    filter:
+      - manifest.json
+      - bin/**
+      - uvr/**
+      - models/**
+      - fonts/**
+asar: true
+mac:
+  target:
+    - dmg
+    - dir
+  category: public.app-category.music
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  identity: null
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+win:
+  target:
+    - nsis
+    - dir
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+publish: null

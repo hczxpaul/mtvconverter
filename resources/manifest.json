@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "note": "外部资源清单。随包提供 FFmpeg 与分离启动垫片；体量大的分离运行时与模型权重由 prepare-resources 按需联网准备，启动时自检能力，缺失时给出可读原因并允许改用导入伴奏。",
+  "ffmpeg": {
+    "bundled": {
+      "dir": "resources/bin",
+      "version": "7.1",
+      "arch": "arm64",
+      "source": "https://www.osxexperts.net/ffmpeg71arm.zip",
+      "note": "静态构建，已启用 libass/fontconfig/freetype/harfbuzz 与 videotoolbox；GPL 构建，随包须保留第三方许可说明。",
+      "files": {
+        "ffmpeg": "60c53a771bdbbf061a57606316c5ab0e75120c10e67a2d385600bc4145e78063",
+        "ffprobe": "c6fa211477830b9e16e05b4c68c609da3ad569ee8184e44f6a08f2d5f3e7886c"
+      }
+    },
+    "requiredEncoders": ["libx265", "libx264"],
+    "requiredFilters": ["subtitles"],
+    "requiredMuxers": ["hls", "mp4", "matroska"],
+    "platformEncoders": {
+      "win32": ["hevc_nvenc", "h264_nvenc"],
+      "darwin": ["hevc_videotoolbox", "h264_videotoolbox"]
+    },
+    "optionalFilters": ["vmaf"],
+    "note": "烧录字幕要求 FFmpeg 构建启用 libass/fontconfig；缺失时 E_SUBTITLE_LIBASS 并降级为无字幕输出。"
+  },
+  "uvr": {
+    "backend": "audio-separator",
+    "version": "0.48.0",
+    "launcher": "resources/uvr/launch_separator.py",
+    "cli": ["-m", "--output_dir", "--single_stem", "--output_format", "--model_file_dir"],
+    "singleStem": "Instrumental",
+    "outputFormat": "WAV",
+    "runtime": {
+      "python": "3.10",
+      "venvDir": "runtime/uvr-venv",
+      "packages": ["audio-separator[cpu]"],
+      "note": "运行时安装在 userData（可写），不在只读的 app 包内；ONNX 分离固定走 CPUExecutionProvider，避开 CoreML 对 MDX 模型的算子不支持。"
+    },
+    "modelDir": "models",
+    "defaultModel": "UVR-MDX-NET-Inst_HQ_3",
+    "models": [
+      {
+        "name": "UVR-MDX-NET-Inst_HQ_3.onnx",
+        "sha256": "317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc",
+        "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"
+      }
+    ],
+    "attribution": "Ultimate Vocal Remover 模型（Anjok07 / aufr33 训练，MIT）；分离 CLI 使用 audio-separator。第三方使用其模型须署名 UVR 及开发者。"
+  },
+  "fonts": {
+    "dir": "resources/fonts",
+    "fallbackChain": ["Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei"],
+    "note": "随包可商用中文字体；缺失时回退系统字体渲染，不阻断烧录。"
+  },
+  "licenses": {
+    "uvr": "MIT",
+    "audioSeparator": "MIT",
+    "ffmpeg": "GPL-3.0（随包构建启用 --enable-gpl 与 libx264/libx265）",
+    "hevc": "HEVC 专利池；个人自用场景，随包分发编解码器需保留第三方许可文件"
+  }
+}

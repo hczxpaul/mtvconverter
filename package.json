@@ -1,0 +1,46 @@
+{
+  "name": "mtvconverter",
+  "version": "1.0.0",
+  "description": "把仅含原唱音轨的 MV / live 视频转换为原分辨率 H.265 双音轨 MTV 文件",
+  "private": true,
+  "main": "dist/main/main/index.js",
+  "author": "MTV Converter",
+  "license": "UNLICENSED",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
+    "build:main": "tsc -p tsconfig.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:app": "electron .",
+    "test": "vitest run",
+    "smoke": "node scripts/smoke.mjs",
+    "verify:uvr": "node scripts/verify-uvr.mjs",
+    "verify:e2e": "node scripts/e2e-pipeline.mjs",
+    "resources:check": "node scripts/prepare-resources.mjs --check",
+    "resources:fetch": "node scripts/prepare-resources.mjs --fetch",
+    "resources:setup-uvr": "node scripts/prepare-resources.mjs --setup-uvr",
+    "dist:mac": "npm run build && electron-builder --mac --dir",
+    "dist:win": "npm run build && electron-builder --win --dir",
+    "dist:mac:dmg": "npm run build && electron-builder --mac dmg",
+    "dist:win:nsis": "npm run build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "jassub": "^2.5.37",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "hls.js": "^1.5.17",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
