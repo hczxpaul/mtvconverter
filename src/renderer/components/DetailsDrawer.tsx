@@ -161,6 +161,7 @@ export function DetailsDrawer({
               detailedMode={detailedMode}
               onDetailedModeChange={onDetailedModeChange}
               onSelectAccompaniment={onSelectAccompaniment}
+              backend={backend}
             />
             </div>
           ) : tab === 'logs' ? (

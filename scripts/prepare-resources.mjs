@@ -368,14 +368,29 @@ function pickPython() {
 /**
  * 在 userData 下创建独立 venv 并安装分离运行时，再拉取默认模型。
  * 幂等：已存在 venv 时只补装依赖；已存在且校验通过的模型不重复下载。
+ *
+ * `--gpu`：装 GPU 版分离运行时（Windows: CUDA 版 torch + onnxruntime-gpu）。
+ * onnxruntime / onnxruntime-gpu / onnxruntime-directml 共用同一个 `onnxruntime` 顶层模块，
+ * 三个变体不能共存，切换时必须先卸干净再装，否则谁的 DLL 生效不确定。
  */
-async function doSetupUvr(manifest) {
+async function doSetupUvr(manifest, options = {}) {
   const paths = buildPaths(manifest);
   const steps = [];
+  const runtime = manifest.uvr.runtime;
+  const gpuSpec = runtime?.gpu?.[process.platform];
+  const wantGpu = Boolean(options.gpu);
 
-  if (!manifest.uvr.runtime) {
+  if (!runtime) {
     return { mode: 'setup-uvr', ok: false, conclusion: 'manifest.uvr.runtime 未定义，无法安装运行时。', steps };
   }
+  if (wantGpu && !gpuSpec) {
+    steps.push({
+      step: 'GPU 运行时',
+      ok: false,
+      detail: `当前平台（${process.platform}）在 manifest.uvr.runtime.gpu 中没有配置：macOS 的 ONNX 加速（CoreML）不被 MDX 模型支持，分离只能 CPU。`,
+    });
+  }
+  const useGpu = wantGpu && Boolean(gpuSpec);
 
   const py = pickPython();
   if (!py) {
@@ -398,9 +413,61 @@ async function doSetupUvr(manifest) {
   const pip = run(paths.venvPython, ['-m', 'pip', 'install', '-q', '--upgrade', 'pip'], 300000);
   steps.push({ step: '升级 pip', ok: pip.ok, detail: pip.ok ? '完成' : pip.reason });
 
-  const pkgs = manifest.uvr.runtime.packages || ['audio-separator[cpu]'];
-  const inst = run(paths.venvPython, ['-m', 'pip', 'install', '-q', ...pkgs], 1800000);
-  steps.push({ step: '安装分离依赖', ok: inst.ok, detail: inst.ok ? pkgs.join(' ') : inst.reason });
+  const pkgs = runtime.packagesByPlatform?.[process.platform] || runtime.packages || ['audio-separator[cpu]'];
+
+  // onnxruntime 变体互斥：先看现在装的是哪一种，只有需要切换时才卸载重装
+  const probeProviders = run(
+    paths.venvPython,
+    ['-c', 'import onnxruntime as o; print("|".join(o.get_available_providers()))'],
+    60000,
+  );
+  const providers = probeProviders.ok ? firstLine(probeProviders.stdout) : '';
+  const hasGpuProvider = /CUDAExecutionProvider|DmlExecutionProvider/.test(providers);
+  const needOrtSwitch = useGpu ? !/CUDAExecutionProvider/.test(providers) : hasGpuProvider;
+  if (needOrtSwitch) {
+    const un = run(
+      paths.venvPython,
+      ['-m', 'pip', 'uninstall', '-y', 'onnxruntime', 'onnxruntime-gpu', 'onnxruntime-directml'],
+      300000,
+    );
+    steps.push({ step: '清理 onnxruntime 变体', ok: true, detail: un.ok ? '已卸载旧变体' : `跳过：${un.reason}` });
+  }
+
+  if (useGpu) {
+    // CUDA 版 torch：分离的 STFT 在 torch 里算，只有 ONNX 上 GPU 而 torch 在 CPU 时收益有限
+    const torchSpec = gpuSpec.torch;
+    const cudaOk = run(paths.venvPython, ['-c', 'import torch; print(torch.cuda.is_available())'], 120000);
+    if (!torchSpec || !/True/.test(firstLine(cudaOk.stdout || ''))) {
+      const t = run(
+        paths.venvPython,
+        ['-m', 'pip', 'install', '-q', ...(torchSpec?.version ? [`torch==${torchSpec.version}`] : ['torch']),
+          ...(torchSpec?.indexUrl ? ['--index-url', torchSpec.indexUrl] : [])],
+        3600000,
+      );
+      steps.push({ step: '安装 CUDA 版 torch', ok: t.ok, detail: t.ok ? (torchSpec?.indexUrl ?? '默认源') : t.reason });
+    } else {
+      steps.push({ step: '安装 CUDA 版 torch', ok: true, detail: '已就绪（torch.cuda.is_available()=True）' });
+    }
+  } else if (process.platform === 'win32') {
+    // Windows 上 PyPI 的 torch 自带 CUDA 运行时（约 2.5GB）；纯 CPU 分离不需要，先装 CPU 版省 2GB
+    const torch = run(
+      paths.venvPython,
+      ['-m', 'pip', 'install', '-q', 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu'],
+      1800000,
+    );
+    steps.push({ step: '安装 CPU 版 torch', ok: torch.ok, detail: torch.ok ? 'download.pytorch.org/whl/cpu' : torch.reason });
+  }
+
+  // GPU 模式下不能同时装 onnxruntime（CPU 版）和 onnxruntime-gpu：同一个顶层模块会互相覆盖
+  const installPkgs = useGpu
+    ? [...pkgs.filter((p) => p !== 'onnxruntime'), ...gpuSpec.packages]
+    : pkgs;
+  const inst = run(paths.venvPython, ['-m', 'pip', 'install', '-q', ...installPkgs], 1800000);
+  steps.push({
+    step: '安装分离依赖',
+    ok: inst.ok,
+    detail: inst.ok ? installPkgs.join(' ') : inst.reason,
+  });
 
   const chk = run(
     paths.venvPython,
@@ -417,11 +484,17 @@ async function doSetupUvr(manifest) {
   });
 
   const ok = steps.every((s) => s.ok);
+  const modeText = useGpu
+    ? 'GPU 模式（Windows: CUDA 版 torch + onnxruntime-gpu）'
+    : process.platform === 'win32'
+      ? 'CPU 模式（onnxruntime）'
+      : '平台默认模式（macOS: torch MPS + ONNX CPU，CoreML 不支持 MDX 算子）';
   return {
-    mode: 'setup-uvr', ok, userData: paths.userData, modelDir: paths.modelDir,
+    mode: 'setup-uvr', ok, gpu: useGpu, accelerator: modeText,
+    userData: paths.userData, modelDir: paths.modelDir,
     steps, fetch: fetchResult,
     conclusion: ok
-      ? '分离运行时已就绪：可直接使用「自动生成伴奏」。'
+      ? `分离运行时已就绪（${modeText}）：可直接使用「自动生成伴奏」。`
       : '部分步骤未成功，详见 steps；「导入官方伴奏」路径不受影响。',
   };
 }
@@ -432,16 +505,23 @@ function usage() {
 
 用法：
   node scripts/prepare-resources.mjs --check       自检 FFmpeg/FFprobe 能力 + 分离运行时/模型/字体，写 release/resource-check.json
-  node scripts/prepare-resources.mjs --setup-uvr   在 userData 创建 venv、安装 audio-separator[cpu] 并下载默认模型
+  node scripts/prepare-resources.mjs --setup-uvr   在 userData 创建 venv、安装分离运行时并下载默认模型（默认 CPU）
+  node scripts/prepare-resources.mjs --setup-uvr --gpu
+                                                  装 GPU 版分离运行时（Windows: CUDA 版 torch + onnxruntime-gpu；
+                                                  macOS 无 GPU 路径——CoreML 不支持 MDX 算子）
   node scripts/prepare-resources.mjs --fetch       按 manifest 的 url+sha256 联网下载模型（SHA256 校验 / 断点续传 / 失败重试）
   node scripts/prepare-resources.mjs --help        显示本帮助
+
+环境变量（同 .env / ConfigService）：MTVC_USER_DATA / MTVC_UVR_PYTHON / MTVC_FFMPEG_PATH 等。
 `);
 }
 
 // 用 exitCode 而非 exit()，保证 stdout 重定向到文件/pipe 时也能完整 flush。
 async function main() {
-  const arg = process.argv[2];
-  if (arg === '--help' || arg === '-h' || !arg) { usage(); if (!arg) process.exitCode = 1; return; }
+  const args = process.argv.slice(2);
+  const gpu = args.includes('--gpu');
+  const arg = args.find((a) => a.startsWith('--') && a !== '--gpu');
+  if (args.includes('--help') || args.includes('-h') || !arg) { usage(); if (!arg) process.exitCode = 1; return; }
   if (arg !== '--check' && arg !== '--fetch' && arg !== '--setup-uvr') {
     process.stderr.write(`未知参数：${arg}\n`);
     usage();
@@ -464,7 +544,7 @@ async function main() {
   }
 
   if (arg === '--setup-uvr') {
-    const report = await doSetupUvr(manifest);
+    const report = await doSetupUvr(manifest, { gpu });
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     process.stderr.write(`\n${report.conclusion}\n`);
     process.exitCode = report.ok ? 0 : 1;

@@ -6,11 +6,24 @@
       "dir": "resources/bin",
       "version": "7.1",
       "arch": "arm64",
+      "platform": "darwin",
       "source": "https://www.osxexperts.net/ffmpeg71arm.zip",
       "note": "静态构建，已启用 libass/fontconfig/freetype/harfbuzz 与 videotoolbox；GPL 构建，随包须保留第三方许可说明。",
       "files": {
         "ffmpeg": "60c53a771bdbbf061a57606316c5ab0e75120c10e67a2d385600bc4145e78063",
         "ffprobe": "c6fa211477830b9e16e05b4c68c609da3ad569ee8184e44f6a08f2d5f3e7886c"
+      }
+    },
+    "bundledWindows": {
+      "dir": "resources/bin",
+      "version": "7.1-full_build",
+      "arch": "x64",
+      "platform": "win32",
+      "source": "https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-full_build.zip",
+      "note": "gyan.dev 7.1 full 构建：libass/fontconfig/freetype/harfbuzz、libx265/libx264/libsvtav1、nvenc/nvdec（需 NVIDIA 驱动）、libvmaf。与 macOS 侧同为 7.1，行为一致；GPL 构建。",
+      "files": {
+        "ffmpeg.exe": "36a59b638b49f8e6c622f4de7c4c8aaf8442f30138a58882ee2af3f410e5fd5c",
+        "ffprobe.exe": "5de9d7a6e30b24d84f7a8d98a01698b2592463f75660853d182d1b00fb8c2ddc"
       }
     },
     "requiredEncoders": ["libx265", "libx264"],
@@ -31,10 +44,21 @@
     "singleStem": "Instrumental",
     "outputFormat": "WAV",
     "runtime": {
-      "python": "3.10",
+      "python": "3.10–3.13",
       "venvDir": "runtime/uvr-venv",
-      "packages": ["audio-separator[cpu]"],
-      "note": "运行时安装在 userData（可写），不在只读的 app 包内；ONNX 分离固定走 CPUExecutionProvider，避开 CoreML 对 MDX 模型的算子不支持。"
+      "packages": ["audio-separator[cpu]", "audioread"],
+      "packagesByPlatform": {
+        "win32": ["audio-separator", "onnxruntime", "audioread"]
+      },
+      "gpu": {
+        "win32": {
+          "torch": { "version": "2.14.1+cu126", "indexUrl": "https://download.pytorch.org/whl/cu126" },
+          "packages": ["onnxruntime-gpu"],
+          "requires": "NVIDIA 驱动 ≥ 525（CUDA 12.6 运行时由 torch 的 nvidia-* 依赖自带）；磁盘约 +5GB",
+          "note": "用 `--setup-uvr --gpu` 安装。实测（RTX 4070 Ti SUPER / 60s 素材 / MDX-NET-Inst_HQ_3）：只把 ONNX 放上 CUDA（torch 仍 CPU）时 CUDA 27–28s vs CPU 27–30s，基本持平——瓶颈在 numpy/STFT/落盘而不在卷积网络；DirectML 更差，MDX 推理时 ORT 内部直接报错。因此默认不装 GPU，只有换 demucs 等 torch 系模型时才值得。完整 CUDA 链路（torch 也上 GPU）未能在本机验证：nvidia 依赖约 2.5GB，本机下载 <60KB/s。"
+        }
+      },
+      "note": "运行时安装在 userData（可写），不在只读的 app 包内。macOS 上 torch 走 MPS，但 ONNX 侧固定 CPU：CoreML 不支持 MDX 算子（实测 error code -1）。Windows 上 ONNX 侧按 CUDA → DirectML → CPU 自适应，由 resources/uvr/launch_separator.py 决定；DirectML 实测在 MDX 上会抛 ORT 内部错误，故不作为默认。audioread 必须显式装：audio-separator 0.48 的 uvr_lib_v5.spec_utils 直接 import 它，但依赖里没声明，librosa≥1.0 也不再带。"
     },
     "modelDir": "models",
     "defaultModel": "UVR-MDX-NET-Inst_HQ_3",

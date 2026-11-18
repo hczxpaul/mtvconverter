@@ -184,6 +184,7 @@ export function registerIpc(ctx: AppContext): void {
 
   handle(IPC.invoke.health, null, async (): Promise<HealthResult> => {
     const caps: MediaCapabilities = await ctx.ports.media.capabilities();
+    // detect() 内部已按运行时 provider 校正分离后端，这里直接取结论
     const backend = await ctx.ports.hardware.detect(caps);
     const missing: string[] = [];
     if (!caps.libx265 && !caps.hevcVideotoolbox && !caps.hevcNvenc) missing.push('HEVC 编码器');

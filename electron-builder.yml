@@ -18,7 +18,6 @@ extraResources:
     to: resources
     filter:
       - manifest.json
-      - bin/**
       - uvr/**
       - models/**
       - fonts/**
@@ -33,11 +32,33 @@ mac:
   identity: null
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # 只带 macOS arm64 静态二进制：bin/ 下同时放了两套平台的 ffmpeg，全带会白塞 296MB
+  extraResources:
+    - from: resources
+      to: resources
+      filter:
+        - manifest.json
+        - "bin/ffmpeg"
+        - "bin/ffprobe"
+        - uvr/**
+        - models/**
+        - fonts/**
 win:
   target:
     - nsis
     - dir
   artifactName: ${productName}-Setup-${version}.${ext}
+  # 只带 Windows 版 ffmpeg.exe / ffprobe.exe（gyan 7.1-full，含 libass / libx265 / libsvtav1 / nvenc）
+  extraResources:
+    - from: resources
+      to: resources
+      filter:
+        - manifest.json
+        - "bin/ffmpeg.exe"
+        - "bin/ffprobe.exe"
+        - uvr/**
+        - models/**
+        - fonts/**
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

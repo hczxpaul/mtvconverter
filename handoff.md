@@ -1,6 +1,6 @@
 # handoff · MTV Converter（mtvconverter）
 
-> **最后更新：2026-11-17 11:55 — 按主人授权清空项目 `.trash/`：17G→223M（释放约 16.8G）；余 21 个 NAS 侧 `.smbdelete` 占位文件客户端删不掉，需重挂 SMB 卷清理。**
+> **最后更新：2026-11-18 14:40 — 分离 GPU 做成了「平台自适应 + 显式开关」：垫片按平台选 ONNX provider（win `CUDA→DirectML→CPU`、mac torch MPS + ONNX CPU），`--setup-uvr --gpu` 可装 CUDA 版；实测 MDX 模型 GPU 不提速（27s vs 27s），默认仍 CPU。103 项单测 / verify:uvr / verify:e2e 全绿，安装包已重打。**
 > 规则见 `AGENTS.md` §0：**接手必读本文件，每完成一步工作必须立即更新本文件**。
 
 ## 一、当前状态
@@ -15,10 +15,13 @@
 
 ## 二、下一步（按此顺序）
 
-1. **等主人真机测试**（已装 `/Applications/MTV Converter.app`）：重点看非单轨确认、歌词烧录、预览切轨、取消与断点续跑。
-2. 用真实 MV 补跑 A-01~A-08 人工验收（画质 / 压缩比 / 分离质量 / 主观试听）。
-3. 配置 `CSC_LINK` / 公证环境变量后生成签名 dmg；在 Windows 机器上产出 NSIS 安装包（需同步放置含 nvenc 的 `ffmpeg.exe` 到 `resources/bin`）。
-4. **（主人决定）清掉 `.trash/` 剩余的 21 个 `.smbdelete` 占位目录（223M）**：需重挂 SMB 卷或重启 NAS；客户端已试 `chflags nohidden` + `rm` + `mv` 全部失败（见 §五）。不影响 git，可暂缓。
+1. **主人真机试用 Windows 安装包**（`release/MTV Converter-Setup-1.0.0.exe`）：导入 → 转换 → 预览切轨 → 歌词烧录。
+2. **待决：V-08-DRIFT 口径**——音频比视频短 ~150ms 的源会被判 120ms>40ms 硬失败（剪片段复现；整段 MV 不受影响；与平台/编码器无关）。选项：放宽阈值 / 输出统一 `-shortest` / 明确视为不合格素材。
+3. 用真实 MV 补跑 A-01~A-08 人工验收（画质 / 压缩比 / 分离质量 / 主观试听）——两端都要补。
+4. Mac 侧复跑 `smoke` + `verify:e2e` + `verify:uvr` 复核本轮改动（escapeFilterPath 双层转义、硬件自检 256×256、NVENC qualityArgs、分离后端 provider 校正、速度下拉/输出摘要文案、垫片的 MPS/CPU 策略）；预期 mac 上「分离后端」从 `mps` 变 `cpu`（ONNX 走 CPU），torch 仍是 MPS，属纠正。
+5. **若确实要 GPU 分离**：在网速正常的机器上 `npm run resources:setup-uvr:gpu`（拉 CUDA torch + onnxruntime-gpu ≈2.5GB），复测 MDX 与 demucs 两种模型的耗时，再决定是否把 GPU 设为默认。本机因下载 <60KB/s 未测完。
+6. Mac 侧：配置 `CSC_LINK` / 公证环境变量后生成签名 dmg；Windows 正式发布需开「开发者模式」/管理员去掉 `signAndEditExecutable=false` 并配证书。
+7. **（主人决定）清掉 `.trash/` 剩余的 21 个 `.smbdelete` 占位目录（223M）**：需重挂 SMB 卷或重启 NAS（见 §五），不影响 git。
 
 ## 安装记录（本机）
 
@@ -46,6 +49,9 @@
 | `README.md` | 项目门面：快速上手 / 命令 / 项目结构 / 文档索引（2026-11-17 重写，当前状态为准） |
 | `TASKS.md` | 任务分工排序、模块边界、共享接口、集成约定、功能覆盖矩阵（历史快照，任务已完成） |
 | `VALIDATION.md` | 最终验证结果：命令、结果、验收覆盖、环境限制 |
+| `VALIDATION-WINDOWS.md` | 2026-11-18 Windows 端实测：环境、修复清单、打包限制、已知问题 |
+| `release/MTV Converter-Setup-1.0.0.exe` | Windows 可分发产物（190 MB，NSIS，未签名 / 无自定义图标） |
+| `resources/bin/ffmpeg.exe`、`ffprobe.exe` | 随包 Windows FFmpeg 7.1-full（libass/libx265/libsvtav1/nvenc/libvmaf） |
 | `release/mac-arm64/MTV Converter.app` | macOS 可分发产物（348 MB，未签名，arm64） |
 | `resources/manifest.json` | 外部资源清单：随包 FFmpeg 版本/架构/SHA256、分离运行时、模型 URL+SHA256、字体 |
 | `resources/bin/` | 随包 arm64 FFmpeg 7.1 + FFprobe（含 libass） |
@@ -215,6 +221,8 @@
    - 验证：`tsc` 双工程 0 错、`vitest` 81 项全过、`npm run build` + 打包安装成功（2026-11-15 04:03）。
    - **待真机确认**：主进程产物是压缩 bundle，无法静态确认 `lyrics:applyEdits` handler 已注册；若 IPC 缺失，界面会弹「歌词校对没能同步给转换，请重开应用后再试」（已把原来的静默 catch 改成可见提示）。需要用真实歌词点一次打点验证。
 
+9. **（2026-11-18 盘点，等主人勾选后执行）文档与散落文件清理**：可回收约 1.4 GB（`node_modules.win-partial` 360MB、`node_modules.mac-arm64` 600MB、`release/mac-arm64` 解包 .app 355MB、`testdata/*-伴奏版.mp4` 61MB、`output/*.mp4` 29MB、`dist/` 5.6MB、`.DS_Store`）；另有 `.trash/` 221.6MB（21 个 `.smbdelete` 占位，需重挂 SMB）。待决：`VALIDATION.md`(221 行, 2026-11-12 快照) / `TASKS.md`(69 行, 任务已完成) 删还是移入 `docs/history/`。整理项：`.gitignore` 未覆盖 `node_modules.*/`（960MB 目前是未跟踪状态，会误提交）；`handoff.md` 338 行已超自订的 120 行且章节编号重复（三/六/五/四/五/六）；README/handoff 多处的「81 项测试」等旧数字待统一。
+
 ## 八、已废弃决策（防走回头路，最多 8 条）
 
 - **v1.0**：`-c:v copy` 视频直通、包级哈希保真断言、默认 MKV、KTV 私有容器适配、商业分发合规。
@@ -259,3 +267,74 @@
 
 ### 已知未做（对应 §七 待确认清单）
 暗色模式、日志自动跟随、逐字高亮、字幕文字读屏可见、触控 44px、失败态完整动作映射、成品体积预估与阶段剩余时间、VMAF 数值展示。
+
+## 十、2026-11-18 Windows 端验证（进行中）
+
+### 环境事实（必须知道，别重复踩）
+- 本机：Windows + RTX 4070 Ti SUPER 16G（驱动 617.42，nvenc 可用）+ Node v22.22.2 + npm 10.9.7 + Python 3.13.14（另有 3.12.6 在 `%LOCALAPPDATA%\Programs\Python\Python312`）。`PATH` 里没有 ffmpeg。
+- **项目在 NAS 的 SMB 共享上，直接在共享里 `npm ci` 会慢到不可用**（实测 21 分钟还有一半包没落地）。已改为：项目源码仍在共享里（唯一真相），构建在本地副本 `C:\Users\hczxp\mtvc-build\mtvconverter` 进行，改完文件用 robocopy 同步过去；产物再拷回 `release/`。
+- **github.com 与 huggingface.co 在本机被墙**（`fetch failed`）。可用替代：npm 官方源（快）、`gh-proxy.com` 代理 GitHub Release（实测 2.3 MB/s）、`npmmirror.com/mirrors/electron`（Electron 二进制）。`ELECTRON_BUILDER_BINARIES_MIRROR` 打包时也要指向 npmmirror。
+- **bash 里 `rm` 被 WorkBuddy 的 safe-delete 垫片拦**（`genie-trash failed`）；SMB 上删大目录本来就慢，改用 `mv` 改名或在 PowerShell 里删。
+- **MSYS 会改写传给原生 exe 的参数**：在 Git Bash 里手敲带 `C\:` 的 ffmpeg 命令会被路径转换污染，验证滤镜参数必须用 Node `spawnSync` 起进程，别用 shell 手敲。
+
+### 本轮改动（3 个平台缺陷 + 资源）
+| 文件 | 改动 | 原因 |
+| --- | --- | --- |
+| `src/main/media/runner.ts` | `escapeFilterPath()` 所有特殊字符改成**双层反斜杠**转义 | `-vf` 的值在 FFmpeg 里被解析两次，单层 `\:` 第一层就被吃掉，剩下的 `C:` 当选项分隔符 → `AVFilterGraph: Error parsing a filter description`。实测 `C\:/x/a.ass` 必失败、`C\\:/x/a.ass` 成功；含空格/逗号/分号/中文的目录同样只有双层能过 |
+| `tests/jobs.test.ts` | 输出路径断言改用 `path.join()` 拼 | 原写死 `/tmp/歌曲/歌-伴奏版.mp4`，Windows 上 `join` 产反斜杠，7 项测试全假失败 |
+| `src/main/config/ConfigService.ts` | `executableOnPath()` 在 win32 用 `where` 并取首行 | Windows 没有 `which`，spawn 直接 ENOENT，PATH 兜底形同虚设 |
+| `resources/bin/ffmpeg.exe`、`ffprobe.exe` | 新增 gyan `ffmpeg-7.1-full_build`（148MB × 2） | 含 libass/libx265/libx264/libsvtav1/nvenc/libvmaf，与 Mac 的 7.1 同版本，避免版本行为差异。`resources/bin/` 已在 `.gitignore`，不入库 |
+
+### 已验证（Windows）
+- `npm run typecheck` 0 错误；`npm test` **98 项全过**（6 个文件；handoff 旧记的「81 项」是过时数字，以实测为准）。
+- `npm run build` 成功（renderer JS 814.9 kB / CSS 25.5 kB）。
+- `npm run resources:check`：**核心转码能力就绪，0 项可选资源缺失**；`subtitles` 滤镜检出，模型 SHA256 校验通过。
+- `npm run smoke`：V-01~V-05 / V-07 / V-12 / V-13 + validate 21 项全过，HLS master 含 2 条 audio rendition，**V-09 字幕烧录 YAVG=2.16**（libass 在 Windows 上真实可用）。
+- `npm run verify:uvr`：**U-01~U-04 全绿**，真实 MDX-Net 推理 6s 音频 → 28.1s（CPU，反相相减 RMS −27.6 dB）。
+- 分离运行时落地：`%APPDATA%\mtvconverter\runtime\uvr-venv`（Python 3.12.6）+ torch 2.15.0+cpu + audio-separator 0.48.0 + onnxruntime 1.32.0；模型 `UVR-MDX-NET-Inst_HQ_3.onnx` 在 `%APPDATA%\mtvconverter\models`。
+
+### 踩到的 Windows 专属坑
+- **audio-separator 0.48 缺 `audioread` 依赖**：`uvr_lib_v5.spec_utils` 顶层 `import audioread`，但包元数据没声明，librosa≥1.0 也不再带 → `ModuleNotFoundError` + 退出码 1（表现为 `E_UVR_FAILED`）。已把 `audioread` 写进 `manifest.uvr.runtime.packages`，`prepare-resources --setup-uvr` 会一起装。
+- **PyPI 的 Windows torch 自带 CUDA（约 2.5GB）**，而分离固定走 CPUExecutionProvider，装 CUDA 版纯浪费。`prepare-resources` 现在在 Windows 上优先装 `--index-url https://download.pytorch.org/whl/cpu` 的 CPU 版。
+- **模型/Electron 二进制直连 GitHub 会失败**：模型的 `--fetch` 与 electron 的 postinstall 都要走代理/镜像（`gh-proxy.com` / `npmmirror`）。
+
+### Windows 端交付结论（已跑通）
+- `verify:e2e -- --source 真实MV`：**E-01~E-09 全绿**，258s 1080p → 真实分离 → ASS 烧录 → 双音轨 AV1，194.8s，58.4MB→50.0MB（−14.4%）。
+- `electron-builder --win nsis` 产出 `release/MTV Converter-Setup-1.0.0.exe`（190MB）；静默安装 → 启动 → 界面完整渲染（CDP 实测 9 个按钮 / 三栏 / 输出摘要「.mp4 · 均衡 CRF 40 · AV1」）。
+- **在安装版里驱动真实任务**（经 preload 桥 → IPC → 7 阶段）：COMPLETED，21 项校验 passed=true，HEVC 硬件档 258s MV → 150s（含 CPU 分离），61.99MB。
+- 详细报告见 `VALIDATION-WINDOWS.md`（环境、修复清单、打包限制、已知问题）。
+
+### 本轮额外修的 2 个代码缺陷（Windows 实测暴露，Mac 侧同样受影响）
+- **NVENC 自检样本 128×128 低于 HEVC 最小帧尺寸** → 每台 N 卡机器都被误判「硬件编码器不可用」并静默降级 CPU。已改 256×256，修复后 `HW_CUDA_OK`。
+- **NVENC 把 x265 的 CRF 直接当 `-cq`** → 输出 138% 源体积。实测 `cq=33`≈x265 crf28（84% vs 85%，VMAF 94.7 vs 93.0），改 `cq = crf + 5` + `-rc vbr -b:v 0 -preset p5 -tune hq`；安装版实跑 V-13 从 161% → 106%。
+
+### 2026-11-18 追加：两处「说真话」修正（契约有一次新增，记在此处）
+- **分离后端按运行时真实 provider 校正**：原来按「有 N 卡 ⇒ CUDA」推断，随包 onnxruntime 是 CPU 版 → 界面/日志谎报 `cuda`（mac 侧谎报 `mps`）。
+  - 契约新增（**第二条**，只增不改）：`AccompanimentPort.onnxProviders?(): Promise<string[]>`（可选，实现方可选）；`BackendDecision.separationProvider?: string`。
+  - `HardwareProbe.setSeparationProviders(fn)` 由 `main/index.ts` 注入 `accompaniment.onnxProviders`，`detect()` 内部用 `reconcileSeparation()`（`hardware/detectors.ts`）校正；日志 `hardware.detect.result` 现在直接是实际生效值，不再出现「探测写 cuda、实跑是 cpu」两份矛盾日志。
+  - 实测：`separationBackend=cpu / separationProvider=CPUExecutionProvider / encodeEncoder=hevc_nvenc`，reasonText 追加「分离实际走 CPU（…未安装 GPU 版 onnxruntime）」。
+  - macOS 侧 CoreML 不计入（MDX 算子不支持，垫片强制 CPU），所以 mac 也会如实显示 cpu——这是纠正，不是退化。
+- **界面感知硬件编码器可用性**：「速度」下拉在无硬件编码器时禁用该项并改文案「速度优先 · 本机无硬件编码器」，已选硬件但不可用时补一行说明；输出摘要改显示 `H.265 · 硬件（hevc_nvenc）` / `H.265 · 硬件不可用，走软件`。
+  - 新增 `tests/hardware.test.ts`（5 项）锁住校正行为；总测试数 98 → **103**。
+
+### 2026-11-18 追加 2：分离 GPU（自适应 + 显式开关，实测后默认仍 CPU）
+- **垫片重写**（`resources/uvr/launch_separator.py`）：先调库原生 `setup_torch_device`（mac→MPS/CoreML、win→CUDA、其余 CPU），再覆盖 ONNX provider：
+  - `win32`：`CUDAExecutionProvider → DmlExecutionProvider → CPUExecutionProvider` 取第一个可用（MDX 推理不经过 torch，所以不必为 DML 装 torch-directml）；
+  - `darwin`：torch 保持 MPS，ONNX **固定 CPU**（CoreML 不支持 MDX 算子，实测 error code -1）；想试 CoreML 用 `MTVC_UVR_ONNX=coreml`；
+  - `MTVC_UVR_FORCE_CPU=1`：任何平台强制 CPU；每次启动把实际 provider 打到 stderr（`[mtvc] ONNX execution provider = [...]`）。
+- **安装侧**：`prepare-resources --setup-uvr [--gpu]`，manifest 新增 `runtime.packagesByPlatform.win32` 与 `runtime.gpu.win32`。
+  `onnxruntime` / `-gpu` / `-directml` 共用同一顶层模块，脚本做了互斥（切换前 `pip uninstall` 三个变体），并会探测 `torch.cuda.is_available()` 决定要不要装 CUDA torch。新脚本：`npm run resources:setup-uvr:gpu`。
+- **实测（RTX 4070 Ti SUPER / 60s 素材 / MDX-NET-Inst_HQ_3）**：CPU 27–30s；ONNX 上 CUDA（torch 仍 CPU）27–28s；**DirectML 直接报错**（ORT 内部 UnicodeDecodeError，底层 DML 算子失败）。结论：MDX 的瓶颈在 numpy/STFT/落盘，GPU 上 ONNX 无收益。
+- **未完成**：完整 CUDA 链路（torch cu126 也上 GPU）没测——nvidia 依赖约 2.5GB，本机 download.pytorch.org 只有 <60KB/s，44 分钟未下完，已 kill 并回滚 `onnxruntime`（CPU）+ torch 2.15.0+cpu。若以后要测，直接 `npm run resources:setup-uvr:gpu`（换成快网）。
+- 结论落地：默认仍 CPU；GPU 只作为开关存在，文档写明「MDX 别指望提速，demucs 系才值得」。
+
+### 下一步
+1. **主人真机试用 Windows 安装包**（`release/MTV Converter-Setup-1.0.0.exe`）：重点看导入→转换→预览切轨→歌词烧录。
+2. **待决**：音频比视频短 ~150ms 的源会因 V-08-DRIFT（120ms>40ms）判 FAILED（剪片段复现，整段 MV 不受影响，与平台/编码器无关）；口径需拍板（放宽阈值 / `-shortest` / 视为不合格素材）。
+3. 正式发布前：开「开发者模式」或管理员权限让 winCodeSign 解压成功，去掉 `-c.win.signAndEditExecutable=false`，配 `CSC_LINK` 签名；项目目前无 icon 资源。
+4. Mac 侧复核：`escapeFilterPath` 改成双层转义、`hardware` 自检尺寸、NVENC/`qualityArgs` 改动——Mac 上应无行为变化，但要重跑一次 `smoke` + `verify:e2e` 确认。
+
+### 本机遗留（不影响仓库）
+- 构建副本 `C:\Users\hczxp\mtvc-build\mtvconverter`（含 node_modules）保留，后续增量验证直接用。
+- 共享项目里 `node_modules.mac-arm64` / `node_modules.win-partial` 两份残留待清（SMB 删大目录慢，未动）。
+- `node_modules/app-builder-lib/out/codeSign/windowsSignToolManager.js` 在**本地副本**里有 `MTVC_WINCODESIGN_DIR` 临时补丁，不入库。

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { COMPRESSION_PRESETS } from '../../shared/contracts';
 import type {
-  CompressionPreset, JobConfig, OutputConflict, OutputContainer, VideoCodec, VideoEncoderPreference,
+  BackendDecision, CompressionPreset, JobConfig, OutputConflict, OutputContainer,
+  VideoCodec, VideoEncoderPreference,
 } from '../../shared/contracts';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   detailedMode: boolean;
   onDetailedModeChange: (v: boolean) => void;
   onSelectAccompaniment: () => void;
+  /** 启动时探测出的编码后端；用于判断「速度优先」在本机是否真的可用 */
+  backend?: BackendDecision | null;
 }
 
 const PRESETS = Object.keys(COMPRESSION_PRESETS) as CompressionPreset[];
@@ -21,9 +24,14 @@ export function MoreSettings({
   detailedMode,
   onDetailedModeChange,
   onSelectAccompaniment,
+  backend = null,
 }: Props) {
   // 「覆盖源文件」的二次确认：非模态，选中后先出确认条，点确认才真正生效
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  // 探测未完成时 backend 为 null：此时不臆断，保持可选；探测完成后按真实能力禁用
+  const hwKnown = backend !== null;
+  const hwAvailable = hwKnown && backend.encodeEncoder !== '' && backend.encodeEncoder !== 'libx265';
+  const hwFallenBack = config.videoCodec === 'hevc' && hwKnown && !hwAvailable && config.videoEncoder === 'hardware';
   return (
     <div className="settings">
       <section className="settings__section">
@@ -136,10 +144,17 @@ export function MoreSettings({
               ) : (
                 <>
                   <option value="software">画质优先（慢）</option>
-                  <option value="hardware">速度优先（画质略差）</option>
+                  <option value="hardware" disabled={hwKnown && !hwAvailable}>
+                    {hwAvailable || !hwKnown ? '速度优先（画质略差）' : '速度优先 · 本机无硬件编码器'}
+                  </option>
                 </>
               )}
             </select>
+            {hwFallenBack && (
+              <p className="note-inline" role="status">
+                本机没有可用的 HEVC 硬件编码器（{backend?.reasonText ?? '探测未通过'}），转换时会回落软件编码。
+              </p>
+            )}
           </label>
         </div>
 

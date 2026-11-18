@@ -151,16 +151,24 @@ export function parseNamedList(output: string): Set<string> {
 
 /**
  * 转义 subtitles 滤镜内的文件路径（§6.7 / §10.4）。
- * Windows 盘符冒号、反斜杠、单引号与 filtergraph 特殊字符都需转义；
+ *
+ * **必须写两层反斜杠**：`-vf` 的值在 FFmpeg 里被解析两次（先选项值、再滤镜参数值），
+ * 单层 `\:` 在第一层就被吃掉，剩下的 `C:` 被当成选项分隔符，结果是
+ * `AVFilterGraph: Error parsing a filter description around:` → 整个编码直接失败。
+ * 实测（FFmpeg 7.1 Windows）：`C\:/x/a.ass` 失败，`C\\:/x/a.ass` 通过；
+ * 含空格/逗号/分号/中文的目录同样只有双层转义能过。
+ * POSIX 路径没有盘符冒号，双层转义与否对普通路径完全等价，故统一处理。
  * 空格与中文无需转义——整个 -vf 值作为单个 argv 元素传递，不经过 shell。
  */
 export function escapeFilterPath(p: string): string {
-  return p
-    .replace(/\\/g, '/')
-    .replace(/:/g, '\\:')
-    .replace(/'/g, "\\'")
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;');
+  const posix = p.replace(/\\/g, '/');
+  // JS 字面量 '\\\\' = 两个反斜杠字符
+  const bs = '\\\\';
+  return posix
+    .replace(/:/g, `${bs}:`)
+    .replace(/'/g, `${bs}'`)
+    .replace(/\[/g, `${bs}[`)
+    .replace(/\]/g, `${bs}]`)
+    .replace(/,/g, `${bs},`)
+    .replace(/;/g, `${bs};`);
 }

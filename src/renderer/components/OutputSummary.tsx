@@ -3,12 +3,14 @@
  * 只读 config / report，不写状态；所有数值都来自真实数据，没有则显示占位。
  */
 import { COMPRESSION_PRESETS, crfFor } from '../../shared/contracts';
-import type { JobConfig, ValidationReport } from '../../shared/contracts';
+import type { BackendDecision, JobConfig, ValidationReport } from '../../shared/contracts';
 
 interface Props {
   config: JobConfig;
   report: ValidationReport | null;
   onOpenSettings: () => void;
+  /** 启动探测结果：用来避免「选了硬件加速但这台机器没有」时摘要还说硬件 */
+  backend?: BackendDecision | null;
 }
 
 const VERSION_LABEL: Record<string, string> = {
@@ -22,13 +24,15 @@ const CHECK_LABEL: Record<string, string> = {
   'V-13': '体积', 'V-14': '字幕', 'V-15': '幂等',
 };
 
-export function OutputSummary({ config, report, onOpenSettings }: Props) {
+export function OutputSummary({ config, report, onOpenSettings, backend = null }: Props) {
   const preset = COMPRESSION_PRESETS[config.compressionPreset];
   const crf = crfFor(config.videoCodec, config.compressionPreset);
+  // 摘要必须写「实际会用哪个编码器」：选了硬件但本机没有时，说硬件就是撒谎
+  const hwUsable = backend !== null && backend.encodeEncoder !== '' && backend.encodeEncoder !== 'libx265';
   const encoderLabel = config.videoCodec === 'av1'
     ? 'AV1 · SVT-AV1' // AV1 只有软件编码，不必再说一遍
     : config.videoEncoder === 'hardware'
-      ? 'H.265 · 硬件加速'
+      ? (hwUsable ? `H.265 · 硬件（${backend?.encodeEncoder}）` : 'H.265 · 硬件不可用，走软件')
       : 'H.265 · 软件';
   const naming = config.outputConflict === 'overwrite'
     ? '同名时覆盖源文件'

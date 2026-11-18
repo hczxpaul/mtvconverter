@@ -28,8 +28,14 @@ function readDotEnv(baseDir: string): Record<string, string> {
 }
 
 function executableOnPath(name: string): string {
-  const probe = spawnSync('which', [name], { encoding: 'utf8' });
-  return probe.status === 0 ? probe.stdout.trim() : '';
+  // Windows 没有 which：用 where 取第一行（多结果时 where 会输出多行）
+  const isWin = process.platform === 'win32';
+  const probe = isWin
+    ? spawnSync('where', [`${name}.exe`], { encoding: 'utf8' })
+    : spawnSync('which', [name], { encoding: 'utf8' });
+  if (probe.status !== 0) return '';
+  const first = String(probe.stdout || '').split(/\r?\n/).map((s) => s.trim()).find(Boolean);
+  return first ?? '';
 }
 
 /**

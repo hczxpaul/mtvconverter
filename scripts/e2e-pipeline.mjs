@@ -97,6 +97,8 @@ async function main() {
   const hardware = new HardwareProbe(paths);
   const media = new MediaAdapter(paths);
   const accompaniment = new AccompanimentAdapter(paths);
+  // 与主进程同一口径：注入运行时 provider 探测，detect() 才会给出「实际生效」的分离后端
+  hardware.setSeparationProviders(() => accompaniment.onnxProviders());
   const lyrics = new LyricsService(paths);
   const preview = new PreviewService(paths);
   const presentation = new UiPresentationPolicy(paths);

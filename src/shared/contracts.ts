@@ -314,6 +314,12 @@ export interface BackendDecision {
   reasonCode: string;
   reasonText: string;
   degraded: boolean;
+  /**
+   * 分离运行时**实际**可用的 ONNX provider（如 `CUDAExecutionProvider` / `CPUExecutionProvider`）。
+   * 探测阶段只能按「平台 + 显卡」推断，真实能力取决于安装的 onnxruntime 变体；
+   * 编排层用运行时探测结果回填本字段，并把 separationBackend 校正为实际生效的后端。
+   */
+  separationProvider?: string;
 }
 
 export interface PreviewRequest {
@@ -381,6 +387,13 @@ export interface AccompanimentPort {
   selfTest(): Promise<{ ok: boolean; reason?: string }>;
   separate(originalWav: string, workDir: string, backend: BackendDecision, model: string): Promise<string>;
   importFile(filePath: string, originalWav: string, workDir: string): Promise<string>;
+  /**
+   * 分离运行时真实可用的 ONNX provider 列表（实现方可选）。
+   * 用于把 `BackendDecision.separationBackend` 从「按平台推断」校正为「实际生效」，
+   * 避免在只装了 CPU 版 onnxruntime 的机器上谎报 CUDA / DirectML。
+   * 探测失败返回空数组，调用方按 CPU 处理。
+   */
+  onnxProviders?(): Promise<string[]>;
 }
 
 export interface LyricsPort {

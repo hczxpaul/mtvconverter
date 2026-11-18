@@ -8,11 +8,13 @@ import * as fsp from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { IPC, type BackendDecision, type HardwarePort, type MediaCapabilities, type RuntimePaths } from '../../shared/contracts';
-import { detectBackend } from './detectors';
+import { detectBackend, reconcileSeparation } from './detectors';
 import { logHardware, setHardwareLogger, type ModuleLogSink } from './log';
 
 export class HardwareProbe extends EventEmitter implements HardwarePort {
   private readonly paths: RuntimePaths;
+  /** 分离运行时真实 provider 的来源（由组装层注入）；未注入时不做校正 */
+  private providers?: () => Promise<string[]>;
 
   constructor(paths: RuntimePaths) {
     super();
@@ -24,12 +26,24 @@ export class HardwareProbe extends EventEmitter implements HardwarePort {
     setHardwareLogger(logger);
   }
 
+  /**
+   * 供组装层注入「分离运行时 provider」探测（通常指向 AccompanimentPort.onnxProviders）。
+   * 探测只能按平台/显卡推断分离后端，注入后 detect() 会用实际 provider 校正，
+   * 保证日志、IPC 事件与界面看到的是同一个「实际生效」的结论。
+   */
+  setSeparationProviders(fn: () => Promise<string[]>): void {
+    this.providers = fn;
+  }
+
   async detect(caps: MediaCapabilities): Promise<BackendDecision> {
-    const decision = await detectBackend(this.paths, caps, (encoder) => this.selfTestEncoder(encoder));
+    const detected = await detectBackend(this.paths, caps, (encoder) => this.selfTestEncoder(encoder));
+    const providers = this.providers ? await this.providers() : [];
+    const decision = reconcileSeparation(detected, providers);
     logHardware(decision.degraded ? 'warn' : 'info', 'hardware.detect.result', {
       platform: decision.platform,
       arch: decision.arch,
       separationBackend: decision.separationBackend,
+      separationProvider: decision.separationProvider,
       encodeEncoder: decision.encodeEncoder,
       previewEncoder: decision.previewEncoder,
       reasonCode: decision.reasonCode,
@@ -59,9 +73,14 @@ export class HardwareProbe extends EventEmitter implements HardwarePort {
 
   private async probeOnce(encoder: string): Promise<boolean> {
     const tmp = path.join(os.tmpdir(), `mtv-enc-${randomUUID()}.ts`);
+    // 样本尺寸不能太小：NVENC 的 HEVC 编码器有最小帧尺寸限制，128x128 会被直接拒绝
+    // （实测 Windows/RTX 4070 Ti SUPER：`InitializeEncoder failed: invalid param (8):
+    // Frame dimensions are less than the minimum supported value`），
+    // 结果是每台 N 卡 Windows 机器都被误判成「硬件编码器不可用」而静默降级 CPU。
+    // 256x256 对 NVENC / VideoToolbox / libx265 都安全，1 秒 15fps 仍只耗时几百毫秒。
     const args: string[] = [
       '-hide_banner', '-loglevel', 'error', '-nostdin',
-      '-f', 'lavfi', '-i', 'color=c=black:s=128x128:r=15:d=1',
+      '-f', 'lavfi', '-i', 'color=c=black:s=256x256:r=15:d=1',
       '-t', '1', '-c:v', encoder,
     ];
     if (encoder === 'libx264' || encoder === 'libx265') args.push('-preset', 'veryfast');

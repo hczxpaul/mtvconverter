@@ -79,6 +79,8 @@ async function bootstrap(): Promise<void> {
   // 预览 / 硬件的降级原因码必须经统一 Logger 留痕，才能到 L2 详情与诊断包
   preview.setLogger(logger);
   hardware.setLogger(logger);
+  // 分离后端只能按平台/显卡推断，注入运行时 provider 探测后由 detect() 校正为实际生效值
+  hardware.setSeparationProviders(() => accompaniment.onnxProviders());
 
   const ports: PipelinePorts = { media, accompaniment, lyrics, hardware, preview, presentation, logger, paths: config.paths };
 

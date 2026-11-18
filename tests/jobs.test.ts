@@ -106,60 +106,64 @@ describe('JobService / PipelineController 状态机（mock 端口）', () => {
   afterEach(() => { rmSync(cacheDir, { recursive: true, force: true }); });
 
   describe('输出路径：绝不覆盖源文件', () => {
+    // 期望值必须由 path.join 拼：Windows 上 join 产出反斜杠，写死 POSIX 斜杠会假失败
+    const MUSIC = join('/tmp', '歌曲');
+    const SRC = join(MUSIC, '歌.mp4');
+
     it('输出目录 = 源目录且扩展名与源相同时，自动加「-伴奏版」后缀', () => {
-      const c = cfg({ sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4', outputName: '' });
-      expect(jobs.defaultOutputPath(c)).toBe('/tmp/歌曲/歌-伴奏版.mp4');
+      const c = cfg({ sourcePath: SRC, outputDir: MUSIC, extension: '.mp4', outputName: '' });
+      expect(jobs.defaultOutputPath(c)).toBe(join(MUSIC, '歌-伴奏版.mp4'));
     });
 
     it('输出目录不同则保留原名，不加后缀', () => {
-      const c = cfg({ sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/out', extension: '.mp4', outputName: '' });
-      expect(jobs.defaultOutputPath(c)).toBe('/tmp/out/歌.mp4');
+      const c = cfg({ sourcePath: SRC, outputDir: join('/tmp', 'out'), extension: '.mp4', outputName: '' });
+      expect(jobs.defaultOutputPath(c)).toBe(join('/tmp', 'out', '歌.mp4'));
     });
 
     it('自定义 outputName 与源同名时同样加后缀', () => {
-      const c = cfg({ sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4', outputName: '歌' });
-      expect(jobs.defaultOutputPath(c)).toBe('/tmp/歌曲/歌-伴奏版.mp4');
+      const c = cfg({ sourcePath: SRC, outputDir: MUSIC, extension: '.mp4', outputName: '歌' });
+      expect(jobs.defaultOutputPath(c)).toBe(join(MUSIC, '歌-伴奏版.mp4'));
     });
 
     it('扩展名与源不同时不加后缀（输出 .mkv）', () => {
-      const c = cfg({ sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mkv', outputName: '' });
-      expect(jobs.defaultOutputPath(c)).toBe('/tmp/歌曲/歌.mkv');
+      const c = cfg({ sourcePath: SRC, outputDir: MUSIC, extension: '.mkv', outputName: '' });
+      expect(jobs.defaultOutputPath(c)).toBe(join(MUSIC, '歌.mkv'));
     });
 
     it('命名是确定性的：连续调用结果一致（保证断点续跑不漂移）', () => {
-      const c = cfg({ sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4', outputName: '' });
+      const c = cfg({ sourcePath: SRC, outputDir: MUSIC, extension: '.mp4', outputName: '' });
       expect(jobs.defaultOutputPath(c)).toBe(jobs.defaultOutputPath(c));
     });
 
     it('后缀可自定义', () => {
       const c = cfg({
-        sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4',
+        sourcePath: SRC, outputDir: MUSIC, extension: '.mp4',
         outputName: '', outputConflict: 'suffix', outputSuffix: '-双音轨',
       });
-      expect(jobs.defaultOutputPath(c)).toBe('/tmp/歌曲/歌-双音轨.mp4');
+      expect(jobs.defaultOutputPath(c)).toBe(join(MUSIC, '歌-双音轨.mp4'));
     });
 
     it('后缀含路径分隔符时被清掉（防目录穿越），清空则回退默认', () => {
       const dirty = cfg({
-        sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4',
+        sourcePath: SRC, outputDir: MUSIC, extension: '.mp4',
         outputName: '', outputConflict: 'suffix', outputSuffix: '../x/y',
       });
       // 斜杠被移除后仍停留在源目录内，不会拼出上级路径
-      expect(jobs.defaultOutputPath(dirty)).toBe('/tmp/歌曲/歌..xy.mp4');
+      expect(jobs.defaultOutputPath(dirty)).toBe(join(MUSIC, '歌..xy.mp4'));
 
       const empty = cfg({
-        sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4',
+        sourcePath: SRC, outputDir: MUSIC, extension: '.mp4',
         outputName: '', outputConflict: 'suffix', outputSuffix: '   ',
       });
-      expect(jobs.defaultOutputPath(empty)).toBe('/tmp/歌曲/歌-伴奏版.mp4');
+      expect(jobs.defaultOutputPath(empty)).toBe(join(MUSIC, '歌-伴奏版.mp4'));
     });
 
     it('选择覆盖源文件时直接返回源路径（由编排层用临时文件替换）', () => {
       const c = cfg({
-        sourcePath: '/tmp/歌曲/歌.mp4', outputDir: '/tmp/歌曲', extension: '.mp4',
+        sourcePath: SRC, outputDir: MUSIC, extension: '.mp4',
         outputName: '', outputConflict: 'overwrite',
       });
-      expect(jobs.defaultOutputPath(c)).toBe('/tmp/歌曲/歌.mp4');
+      expect(jobs.defaultOutputPath(c)).toBe(SRC);
     });
   });
 

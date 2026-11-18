@@ -19,7 +19,7 @@
 | Node.js | >= 20（开发验证于 22.22.2） |
 | npm | >= 10 |
 | Python | 3.10+（仅伴奏分离运行时需要） |
-| 操作系统 | macOS arm64（已验证）；Windows 需自备含 nvenc 的 `ffmpeg.exe` |
+| 操作系统 | macOS arm64 / Windows x64（两端均已实测跑通，见 `VALIDATION-WINDOWS.md`） |
 
 ### 安装与运行
 
@@ -35,17 +35,25 @@ npm run dev:app             # 启动 Electron（需先 build）
 
 ```bash
 npm run resources:check     # 自检：FFmpeg 能力 / libass / 运行时 / 模型 SHA256 / 字体
-npm run resources:setup-uvr # 首次准备分离运行时
+npm run resources:setup-uvr # 首次准备分离运行时（默认 CPU）
+npm run resources:setup-uvr:gpu  # 可选：GPU 分离（Windows：CUDA torch + onnxruntime-gpu，约 +5GB）
 ```
 
-未准备运行时不影响「导入官方伴奏」路径。随包 arm64 FFmpeg 7.1（含 libass / libx265 / videotoolbox）位于 `resources/bin`，按 `resources/manifest.json` 校验。
+> **GPU 分离要不要开**：`resources/uvr/launch_separator.py` 已按平台自适应选 ONNX provider
+> （Windows `CUDA → DirectML → CPU`；macOS torch 走 MPS、ONNX 固定 CPU，因为 CoreML 不支持 MDX 算子），
+> 但实测 MDX-NET 系列模型把 ONNX 放上 CUDA 几乎不提速（60s 素材 27s vs 27s，瓶颈在 numpy/STFT/落盘），
+> DirectML 还会直接报错。所以默认装 CPU；只有换 demucs 这类 torch 系模型时才值得开 GPU。
+> `MTVC_UVR_FORCE_CPU=1` 可任何平台强制 CPU。
+
+未准备运行时不影响「导入官方伴奏」路径。随包 FFmpeg 7.1 位于 `resources/bin`，按 `resources/manifest.json` 校验：
+macOS 是 arm64 静态构建（libass / libx265 / videotoolbox），Windows 是 gyan `7.1-full_build`（libass / libx265 / libsvtav1 / nvenc / libvmaf）。
 
 ### 常用命令
 
 | 命令 | 用途 |
 | --- | --- |
 | `npm run typecheck` | 主进程 + 渲染层类型检查 |
-| `npm test` | 单元 / 契约测试（81 项） |
+| `npm test` | 单元 / 契约测试（103 项） |
 | `npm run smoke` | 真实 FFmpeg 冒烟：双音轨 + 字幕烧录 + HLS 切轨 |
 | `npm run verify:uvr` | 真实 MDX-Net 分离（走编译产物） |
 | `npm run verify:e2e` | 完整管线端到端（七阶段） |
@@ -58,6 +66,19 @@ npm run resources:setup-uvr # 首次准备分离运行时
 > `env -u NODE_OPTIONS -u CODEBUDDY_BROKERED_FS_HOOK_ENABLED`，否则 Vite 清空产物目录会被拦截。
 
 macOS 签名公证需配置 `CSC_LINK` / `CSC_KEY_PASSWORD` 与 Apple 公证环境变量（见 `.env.example`）；未提供证书时按 `electron-builder.yml` 的 `identity: null` 生成未签名本地产物。
+
+Windows 打包（2026-11-18 实测）：
+
+```bash
+# GitHub 直连不通时用镜像；winCodeSign 含 macOS 符号链接，非管理员 / 未开开发者模式会解压失败
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
+ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+npx electron-builder --win nsis
+```
+
+- 无图标资源时 electron-builder 用默认 Electron 图标；未配证书则不签名。
+- 解压失败（`Cannot create symbolic link ... libcrypto.dylib`）的绕过方式与正式发布需要的前置条件见 `VALIDATION-WINDOWS.md` §4。
+- 打包配置已按平台过滤 `extraResources`，Windows 包只带 `ffmpeg.exe` / `ffprobe.exe`，macOS 包只带 arm64 二进制。
 
 ## 项目结构
 
@@ -76,7 +97,7 @@ src/
 │   └── ipc/      # IPC 控制器（zod 边界校验）
 └── renderer/     # React 界面（三列布局 + 歌词校对 + 详情抽屉）
 scripts/          # 资源准备 / 冒烟 / UVR 验证 / E2E 管线
-tests/            # 单元与契约测试（6 个文件）
+tests/            # 单元与契约测试（7 个文件）
 docs/             # 设计文档与可视化评审稿
 resources/        # 随包资源清单与启动垫片（二进制按需下载，见 .gitignore）
 build/            # macOS 签名 entitlements
@@ -94,6 +115,7 @@ release/          # 打包产物（不入库）
 | `docs/MTV转换器-设计文档与开发方案.md` | **权威** | 设计、接口契约与开发方案（v1.3） |
 | `docs/MTV转换器-设计概览.html` | 评审稿 | 设计可视化，与 MD 冲突时以 MD 为准 |
 | `VALIDATION.md` | 历史快照 | 2026-11-12 的验证结果；最新结论见 `handoff.md` |
+| `VALIDATION-WINDOWS.md` | 实测记录 | 2026-11-18 Windows 端：环境、修复清单、打包限制、已知问题 |
 | `TASKS.md` | 历史快照 | 开发任务分工与模块边界（任务已完成） |
 | `THIRD_PARTY_NOTICES.md` | 声明 | 第三方许可与用途声明 |
 

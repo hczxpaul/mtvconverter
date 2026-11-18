@@ -20,6 +20,7 @@
     "resources:check": "node scripts/prepare-resources.mjs --check",
     "resources:fetch": "node scripts/prepare-resources.mjs --fetch",
     "resources:setup-uvr": "node scripts/prepare-resources.mjs --setup-uvr",
+    "resources:setup-uvr:gpu": "node scripts/prepare-resources.mjs --setup-uvr --gpu",
     "dist:mac": "npm run build && electron-builder --mac --dir",
     "dist:win": "npm run build && electron-builder --win --dir",
     "dist:mac:dmg": "npm run build && electron-builder --mac dmg",

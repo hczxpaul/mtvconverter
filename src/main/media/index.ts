@@ -33,7 +33,14 @@ function qualityArgs(encoder: string, crf: number): string[] {
   if (e.includes('svtav1')) return ['-crf', String(crf), '-preset', '8'];
   // libaom 的「恒定质量」需要把目标码率置 0，否则 CRF 不生效
   if (e.includes('libaom')) return ['-crf', String(crf), '-b:v', '0', '-cpu-used', '6'];
-  if (e.includes('nvenc')) return ['-cq', String(crf)];
+  // NVENC 的 cq 与 x265 的 CRF 不是同一把尺子：实测（1080p / 60s / hvc1）
+  //   cq=crf28 → 138% 源体积；cq=33 → 84%（≈ x265 crf28 的 85%），VMAF 94.7 vs 93.0。
+  // 故按 cq = crf + 5 映射；同时必须显式 `-rc vbr -b:v 0`，否则残留的默认码率目标
+  // 会把「恒定质量」顶成高码率（实测 -cq 28 不加 -b:v 0 也是 138%）。
+  if (e.includes('nvenc')) {
+    const cq = Math.min(51, Math.max(0, Math.round(crf) + 5));
+    return ['-rc', 'vbr', '-cq', String(cq), '-b:v', '0', '-preset', 'p5', '-tune', 'hq'];
+  }
   if (e.includes('videotoolbox')) {
     const q = Math.round(100 - (crf - 10) * (100 / 41));
     return ['-q:v', String(Math.min(100, Math.max(10, q)))];

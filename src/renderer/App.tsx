@@ -892,6 +892,7 @@ export function App() {
             <OutputSummary
               config={config}
               report={report}
+              backend={backend}
               onOpenSettings={() => {
                 setDetailsTab('settings');
                 setDetailsOpen(true);

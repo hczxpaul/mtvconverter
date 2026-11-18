@@ -125,12 +125,36 @@ export class AccompanimentAdapter implements AccompanimentPort {
   private readonly paths: RuntimePaths;
   private active?: ProcHandle;
   private readonly notices: string[] = [];
+  private providersCache?: string[];
 
   /** 可选进度回调：仅在 stdout 解析出真实百分比时调用；解析不到不伪造、不调用。 */
   onProgress?: (percent: number, message: string) => void;
 
   constructor(paths: RuntimePaths) {
     this.paths = paths;
+  }
+
+  /**
+   * 分离运行时真实可用的 ONNX provider（结果缓存，只探一次）。
+   * 探测失败返回空数组——调用方按 CPU 处理，不臆测 GPU 可用。
+   */
+  async onnxProviders(): Promise<string[]> {
+    if (this.providersCache) return this.providersCache;
+    try {
+      const handle = runProcess({
+        command: this.paths.uvrPython,
+        args: ['-c', 'import onnxruntime as o; print("|".join(o.get_available_providers()))'],
+        timeoutMs: 60_000,
+      });
+      const r = await handle.wait();
+      if (r.code === 0) {
+        this.providersCache = r.stdout.trim().split('|').map((s) => s.trim()).filter(Boolean);
+        return this.providersCache;
+      }
+    } catch {
+      // 运行时缺失 / Python 不可执行：交给 selfTest 报错，这里只返回空
+    }
+    return [];
   }
 
   /** 终止当前活动子进程树（UVR 分离 / 伴奏解码）。编排层取消任务时调用。 */

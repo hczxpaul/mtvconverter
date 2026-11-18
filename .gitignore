@@ -1,5 +1,7 @@
 # 依赖与构建产物（build/ 内含打包必需的 entitlements.mac.plist，不忽略）
 node_modules/
+# 换架构 / 换平台时留下的依赖备份，动辄几百 MB，绝不入库
+node_modules.*/
 dist/
 release/
 *.tsbuildinfo
@@ -8,6 +10,9 @@ release/
 .DS_Store
 .trash/
 *.log
+# NAS 侧删除失败留下的占位文件
+*.smbdelete
+.tmp-vitest/
 
 # 私有配置与密钥
 .env

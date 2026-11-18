@@ -71,6 +71,8 @@ export class PipelineController {
       done('PROBE');
 
       // ── 硬件探测（降级一次，不静默） ────────────────────────
+      // 分离后端已由 HardwareProbe 在 detect() 内部按运行时真实 provider 校正过
+      // （见 setSeparationProviders 注入），这里拿到的就是「实际生效」的结论。
       const backend: BackendDecision = await this.ports.hardware.detect(caps);
       if (backend.degraded) {
         this.jobs.emitFallback(backend);

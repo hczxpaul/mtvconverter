@@ -111,6 +111,47 @@ function buildDecision(
 }
 
 /**
+ * 用运行时实际 provider 校正分离后端（探测只能「推断」，这里才是「事实」）。
+ *
+ * 探测阶段按「平台 + 显卡」判断：有 N 卡就当 CUDA 可用。但分离能不能真上 GPU，
+ * 取决于装的是哪个 onnxruntime 变体——随包 `audio-separator[cpu]` 装的是
+ * `onnxruntime`（只有 CPU / Azure），`onnxruntime-gpu` 才有 CUDAExecutionProvider，
+ * `onnxruntime-directml` 才有 DmlExecutionProvider。
+ * macOS 侧 CoreML 对 MDX 模型算子不支持（启动垫片强制 CPU），因此也不计入。
+ *
+ * providers 为空（探测失败 / 实现方不支持）时原样返回，不猜。
+ */
+export function reconcileSeparation(decision: BackendDecision, providers: string[]): BackendDecision {
+  if (providers.length === 0) return decision;
+  const has = (name: string): boolean => providers.includes(name);
+  const actual: Backend = has('CUDAExecutionProvider')
+    ? 'cuda'
+    : has('DmlExecutionProvider')
+      ? 'directml'
+      : 'cpu';
+  const providerName = actual === 'cuda'
+    ? 'CUDAExecutionProvider'
+    : actual === 'directml'
+      ? 'DmlExecutionProvider'
+      : 'CPUExecutionProvider';
+  if (actual === decision.separationBackend) {
+    return { ...decision, separationProvider: providerName };
+  }
+  const note = actual === 'cpu'
+    ? `；分离实际走 CPU（运行时 provider：${providers.join(' / ')}，未安装 GPU 版 onnxruntime）`
+    : `；分离实际 provider：${providerName}`;
+  logHardware('info', 'hardware.separation.reconciled', {
+    detected: decision.separationBackend, actual, providers,
+  });
+  return {
+    ...decision,
+    separationBackend: actual,
+    separationProvider: providerName,
+    reasonText: decision.reasonText + note,
+  };
+}
+
+/**
  * 完整探测流程。selfTest 由 HardwareProbe 注入（对指定编码器生成 1 秒样本自检）。
  * 返回值始终可解释：degraded=true 即 CPU 模式，编排层据此发 IPC.event.fallback 与「使用 CPU 模式 ⓘ」。
  */
