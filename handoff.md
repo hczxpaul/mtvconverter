@@ -1,6 +1,6 @@
 # handoff · MTV Converter（mtvconverter）
 
-> **最后更新：2026-11-18 15:30 — 仓库清理：删掉约 1.4GB 散落物（`node_modules.*` 备份、解包 .app、旧产物、`dist/`），移除过期的 `VALIDATION.md` / `TASKS.md`，`.gitignore` 补 `node_modules.*/`，本文件从 338 行压到约 130 行。**
+> **最后更新：2026-11-18 15:32 — 仓库清理：删掉约 1.4GB 散落物（`node_modules.*` 备份、解包 .app、旧产物、`dist/`、`.DS_Store`），移除过期快照 `VALIDATION.md` / `TASKS.md`，`.gitignore` 补 `node_modules.*/`，本文件从 338 行压到 119 行、章节编号去重。**
 > 规则见 `AGENTS.md` §0：**接手必读本文件，每完成一步工作必须立即更新本文件。**
 
 ## 一、当前状态
