@@ -1,6 +1,6 @@
 # handoff · MTV Converter（mtvconverter）
 
-> **最后更新：2026-11-18 16:02 — Mac 侧复核通过并出包装机：本地副本离线装依赖 → typecheck 0 错 / 103 项测试全过 / build 成功 → dmg 138MB（新 JS `index-HcQTgbjF.js`）→ ad-hoc 签名装入 `/Applications` 启动成功，无崩溃；分离后端按预期由 mps 校正为 cpu。**
+> **最后更新：2026-11-18 16:08 — 首个版本归档：README 面向发布重写（功能/关于/致谢，删 74 行内部噪音）；打轻量 tag `v1.0.0`（HEAD eb23837）；生成 `archive/v1.0.0/`（源码 zip 373K + dmg 138M + exe 181M + SHA256SUMS，校验全 OK），已 gitignore；仓库无 remote，上传待主人指定目标。**
 > 规则见 `AGENTS.md` §0：**接手必读本文件，每完成一步工作必须立即更新本文件。**
 
 ## 一、当前状态
@@ -10,15 +10,17 @@
 - **Mac 打包方式（本轮验证有效）**：共享上 `node_modules` 缺失且 `npm ci` 曾 21 分钟装不完 → 用本地副本 `/Users/summergg/mtvc-mac-build`，`rsync` 同步源码（排除大件）+ 从共享拷 `resources/bin` arm64 ffmpeg，`npm ci --offline`（本机 3.6G 缓存，14s 装 519 包），`env -u NODE_OPTIONS -u CODEBUDDY_BROKERED_FS_HOOK_ENABLED` 跑 build/electron-builder。新 dmg 138MB（旧 147MB），已拷回 `release/`（MD5 22dc266c... 双向一致）。
 - **默认输出**：MP4（`av01`，可切 HEVC `hvc1`）+ 原唱/伴奏双音轨；压缩档按编码器分表（AV1 35/40/44、HEVC 24/28/31），统一走 `crfFor(codec, preset)`；扩展名 `.mp4`。
 - **构建位置**：源码在 NAS 的 SMB 共享（唯一真相），**构建在本地副本 `C:\Users\hczxp\mtvc-build\mtvconverter`** 跑，改完同步过去，产物拷回 `release/`。共享上直接 `npm ci` 不可用（21 分钟没装完）。
-- **git**：`main` 分支，本地身份 `MTV Converter <mtvconverter@local>`，无 remote，89 个跟踪文件。
+- **git**：`main` 分支，本地身份 `MTV Converter <mtvconverter@local>`，无 remote，89 个跟踪文件。`v1.0.0` 附注 tag 指向 eb23837（README 重写后的提交）。
+- **发布归档（2026-11-18）**：`archive/v1.0.0/` 含 `mtvconverter-v1.0.0-source.zip`（git archive，373K）、两端安装包 dmg/exe、`SHA256SUMS.txt`（三项校验 OK），整目录已 gitignore。README 已按发布口径重写：聚焦「解决什么问题/主要功能/关于/致谢」，剔除 GPU 取舍、垫片绕过、镜像配置、内部文档索引等噪音。
 
 ## 二、下一步（按此顺序）
 
-1. **主人真机试用 Windows 安装包**：导入 → 转换 → 预览切轨 → 歌词烧录。
-2. **待决：V-08-DRIFT 口径**——音频比视频短 ~150ms 的源会因 drift 120ms > 40ms 判 FAILED（用 `-ss/-t -c copy` 剪的片段复现；整段 MV 不受影响；与平台、编码器无关）。选项：放宽阈值 / 输出统一 `-shortest` / 明确视为不合格素材。
-3. ~~Mac 侧复核本轮改动~~ **已完成（2026-11-18）**：typecheck/103 项/build/dmg 装机启动均通过，provider 校正实测生效。剩余（可选，需真机素材）：Mac 侧 `smoke` + `verify:uvr` + `verify:e2e` 用真实 MV 跑一遍（Windows 已跑通 E-01~09，Mac 仅做编译/启动级复核）。
-4. **正式发布前**：macOS 配 `CSC_LINK` + 公证；Windows 需开「开发者模式」或管理员（否则 winCodeSign 解压失败）并去掉 `-c.win.signAndEditExecutable=false`、配证书；项目尚无 icon 资源。
-5. **`.trash/` 残留 221.6MB / 21 个 `.smbdelete` 占位**：客户端删不掉，需重挂 SMB 卷或重启 NAS。
+1. **上传 v1.0.0 归档（待主人指定目标）**：仓库无 remote；`archive/v1.0.0/` 已备齐（源码 zip + 两端安装包 + SHA256SUMS）。若传 GitHub Releases → 需先加 remote + 推 tag；若传网盘/NAS → 直接拷目录。主人定目标后再动。
+2. **主人真机试用 Windows 安装包**：导入 → 转换 → 预览切轨 → 歌词烧录。
+3. **待决：V-08-DRIFT 口径**——音频比视频短 ~150ms 的源会因 drift 120ms > 40ms 判 FAILED（用 `-ss/-t -c copy` 剪的片段复现；整段 MV 不受影响；与平台、编码器无关）。选项：放宽阈值 / 输出统一 `-shortest` / 明确视为不合格素材。
+4. ~~Mac 侧复核本轮改动~~ **已完成（2026-11-18）**：typecheck/103 项/build/dmg 装机启动均通过，provider 校正实测生效。剩余（可选，需真机素材）：Mac 侧 `smoke` + `verify:uvr` + `verify:e2e` 用真实 MV 跑一遍（Windows 已跑通 E-01~09，Mac 仅做编译/启动级复核）。
+5. **正式发布前**：macOS 配 `CSC_LINK` + 公证；Windows 需开「开发者模式」或管理员（否则 winCodeSign 解压失败）并去掉 `-c.win.signAndEditExecutable=false`、配证书；项目尚无 icon 资源。
+6. **`.trash/` 残留 221.6MB / 21 个 `.smbdelete` 占位**：客户端删不掉，需重挂 SMB 卷或重启 NAS。
 
 ## 三、关键决策与原因
 
@@ -34,6 +36,9 @@
 | 分离默认 CPU，GPU 只作显式开关 | 实测 MDX 在 CUDA 上不提速（27s vs 27s），DirectML 直接报错；瓶颈在 numpy/STFT/落盘 |
 
 ## 四、踩坑（别重复踩）
+
+**打包 / 发布**
+- **`.gitignore` 不支持行尾内联注释**：写 `archive/           # 说明` 会把 `#` 连同前面空格当成路径的一部分，规则失效（`git check-ignore` 无输出、`git status` 仍显示 `?? archive/`）。注释必须单独成行。
 
 **打包 / 安装**
 - 共享 SMB 上缺 `node_modules` 且 `npm ci` 曾 21 分钟没装完 → 必须复制源码到**本地磁盘**构建（`npm ci --offline` 用本机 3.6G 缓存，14s 装完），再把 dmg 拷回共享。
