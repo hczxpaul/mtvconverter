@@ -114,16 +114,19 @@ release/          # 打包产物（不入库）
 | `handoff.md` | 活页 | 当前进展、下一步、关键决策与踩坑记录 |
 | `docs/MTV转换器-设计文档与开发方案.md` | **权威** | 设计、接口契约与开发方案（v1.3） |
 | `docs/MTV转换器-设计概览.html` | 评审稿 | 设计可视化，与 MD 冲突时以 MD 为准 |
-| `VALIDATION.md` | 历史快照 | 2026-11-12 的验证结果；最新结论见 `handoff.md` |
 | `VALIDATION-WINDOWS.md` | 实测记录 | 2026-11-18 Windows 端：环境、修复清单、打包限制、已知问题 |
-| `TASKS.md` | 历史快照 | 开发任务分工与模块边界（任务已完成） |
 | `THIRD_PARTY_NOTICES.md` | 声明 | 第三方许可与用途声明 |
-
-> `VALIDATION.md` / `TASKS.md` 是开发过程记录，部分数据（如默认编码、测试项数）反映的是当时状态，不代表当前实现。
 
 ## 验证
 
-完整构建、测试、冒烟与真实素材端到端结果见 `handoff.md`；早期基线见 `VALIDATION.md`。核心链路已用真实 MV 与真实分离模型验证：单音轨 MV → MDX-Net 伴奏分离 → 字幕烧录 → 单次编码 → 双音轨输出。
+完整构建、测试、冒烟与真实素材端到端结果见 `handoff.md` 与 `VALIDATION-WINDOWS.md`。核心链路已用真实 MV 与真实分离模型验证：单音轨 MV → MDX-Net 伴奏分离 → 字幕烧录 → 单次编码 → 双音轨输出。
+
+```bash
+npm run typecheck && npm test        # 0 错误 / 103 项单测
+npm run smoke                        # 双音轨 + 字幕烧录 + HLS 切轨（真 FFmpeg）
+npm run verify:uvr                   # 真实 MDX-Net 分离（U-01~U-04）
+npm run verify:e2e -- --source <MV>  # 完整管线（E-01~E-09）
+```
 
 ## 许可与声明
 
