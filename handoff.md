@@ -1,12 +1,13 @@
 # handoff · MTV Converter（mtvconverter）
 
-> **最后更新：2026-11-18 15:32 — 仓库清理：删掉约 1.4GB 散落物（`node_modules.*` 备份、解包 .app、旧产物、`dist/`、`.DS_Store`），移除过期快照 `VALIDATION.md` / `TASKS.md`，`.gitignore` 补 `node_modules.*/`，本文件从 338 行压到 119 行、章节编号去重。**
+> **最后更新：2026-11-18 16:02 — Mac 侧复核通过并出包装机：本地副本离线装依赖 → typecheck 0 错 / 103 项测试全过 / build 成功 → dmg 138MB（新 JS `index-HcQTgbjF.js`）→ ad-hoc 签名装入 `/Applications` 启动成功，无崩溃；分离后端按预期由 mps 校正为 cpu。**
 > 规则见 `AGENTS.md` §0：**接手必读本文件，每完成一步工作必须立即更新本文件。**
 
 ## 一、当前状态
 
 - **两端均已跑通并出包**：macOS `release/MTV Converter-1.0.0-arm64.dmg`（147MB，ad-hoc 签名，已装入 `/Applications`）；Windows `release/MTV Converter-Setup-1.0.0.exe`（190MB，NSIS，未签名、无自定义图标）。
-- **验证基线（Windows 2026-11-18 实测）**：`typecheck` 0 错误 · **103 项单测** · `smoke`（V-01~13 + V-09 烧录 YAVG=2.16）· `verify:uvr` U-01~04 · `verify:e2e` E-01~09（258s 真实 MV → 真实分离 → 烧录 → 双音轨 AV1，190s，58.4MB→50.0MB）；安装版经 preload 桥驱动真实任务 COMPLETED，21 项校验全过。macOS 基线停在 2026-11-17（81 项单测、界面 v3、dmg 装入），本轮改动未在 Mac 复核。
+- **验证基线（两端 2026-11-18 实测）**：Windows `typecheck` 0 错 · 103 单测 · smoke/uvr/e2e 全过 · 安装版真实任务 COMPLETED（21 项校验全过）。**Mac 本轮已复核**：本地副本 `typecheck` 0 错 · **103 单测全过**（7 文件，含新增 hardware.test.ts）· `build` 成功 · dmg 装 `/Applications` 启动无崩溃，日志确认 `hardware.separation.reconciled` detected=mps→actual=cpu（provider 校正生效）、`degraded=false`。
+- **Mac 打包方式（本轮验证有效）**：共享上 `node_modules` 缺失且 `npm ci` 曾 21 分钟装不完 → 用本地副本 `/Users/summergg/mtvc-mac-build`，`rsync` 同步源码（排除大件）+ 从共享拷 `resources/bin` arm64 ffmpeg，`npm ci --offline`（本机 3.6G 缓存，14s 装 519 包），`env -u NODE_OPTIONS -u CODEBUDDY_BROKERED_FS_HOOK_ENABLED` 跑 build/electron-builder。新 dmg 138MB（旧 147MB），已拷回 `release/`（MD5 22dc266c... 双向一致）。
 - **默认输出**：MP4（`av01`，可切 HEVC `hvc1`）+ 原唱/伴奏双音轨；压缩档按编码器分表（AV1 35/40/44、HEVC 24/28/31），统一走 `crfFor(codec, preset)`；扩展名 `.mp4`。
 - **构建位置**：源码在 NAS 的 SMB 共享（唯一真相），**构建在本地副本 `C:\Users\hczxp\mtvc-build\mtvconverter`** 跑，改完同步过去，产物拷回 `release/`。共享上直接 `npm ci` 不可用（21 分钟没装完）。
 - **git**：`main` 分支，本地身份 `MTV Converter <mtvconverter@local>`，无 remote，89 个跟踪文件。
@@ -15,7 +16,7 @@
 
 1. **主人真机试用 Windows 安装包**：导入 → 转换 → 预览切轨 → 歌词烧录。
 2. **待决：V-08-DRIFT 口径**——音频比视频短 ~150ms 的源会因 drift 120ms > 40ms 判 FAILED（用 `-ss/-t -c copy` 剪的片段复现；整段 MV 不受影响；与平台、编码器无关）。选项：放宽阈值 / 输出统一 `-shortest` / 明确视为不合格素材。
-3. **Mac 侧复跑** `smoke` + `verify:uvr` + `verify:e2e`，复核本轮改动（`escapeFilterPath` 双层转义、硬件自检 256×256、NVENC `qualityArgs`、分离 provider 校正、速度下拉/输出摘要文案、垫片 MPS 策略）。预期变化：界面「分离后端」由 `mps` 变 `cpu`（ONNX 走 CPU），torch 仍 MPS。
+3. ~~Mac 侧复核本轮改动~~ **已完成（2026-11-18）**：typecheck/103 项/build/dmg 装机启动均通过，provider 校正实测生效。剩余（可选，需真机素材）：Mac 侧 `smoke` + `verify:uvr` + `verify:e2e` 用真实 MV 跑一遍（Windows 已跑通 E-01~09，Mac 仅做编译/启动级复核）。
 4. **正式发布前**：macOS 配 `CSC_LINK` + 公证；Windows 需开「开发者模式」或管理员（否则 winCodeSign 解压失败）并去掉 `-c.win.signAndEditExecutable=false`、配证书；项目尚无 icon 资源。
 5. **`.trash/` 残留 221.6MB / 21 个 `.smbdelete` 占位**：客户端删不掉，需重挂 SMB 卷或重启 NAS。
 
@@ -33,6 +34,11 @@
 | 分离默认 CPU，GPU 只作显式开关 | 实测 MDX 在 CUDA 上不提速（27s vs 27s），DirectML 直接报错；瓶颈在 numpy/STFT/落盘 |
 
 ## 四、踩坑（别重复踩）
+
+**打包 / 安装**
+- 共享 SMB 上缺 `node_modules` 且 `npm ci` 曾 21 分钟没装完 → 必须复制源码到**本地磁盘**构建（`npm ci --offline` 用本机 3.6G 缓存，14s 装完），再把 dmg 拷回共享。
+- `ditto` 覆盖 `/Applications` 里的旧 app 后，`codesign --verify --deep --strict` 报 **a sealed resource is missing or invalid**（旧目录残留文件破坏签名封条）→ 覆盖后必须在 `/Applications` 上**重新** `codesign --force --deep --sign -`（连同 bin 里的 ffmpeg/ffprobe 单独签），再校验即通过。
+- 覆盖安装前备份旧版：跨设备 `mv`（本地→SMB）报 EXDEV，改用本机 `cp -a` 到 `~/mtvc-old-app-<ts>` 留退路。
 
 **平台 / FFmpeg**
 - `-vf` 的值被解析**两次**：字幕滤镜里的 Windows 盘符必须写 `C\\:`（两个反斜杠）。单层 `\:` 会被第一层吃掉，报 `AVFilterGraph: Error parsing a filter description`。
