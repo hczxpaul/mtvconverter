@@ -6,7 +6,7 @@
 
 点歌系统要认一份 MV，通常要求视频里同时有「原唱」和「伴奏」两条音轨，并带可同步的歌词字幕。手工做这件事要分音轨、找伴奏、对齐、压视频、烧字幕，步骤繁琐且容易出错。
 
-MTV Converter 把这些步骤串成一条流水线：拖入视频 → 自动生成或导入伴奏 → 取词校对 → 一次编码输出双音轨成品。全程本地处理，原分辨率、音画对齐，输出为通用的 MP4（不是私有容器）。
+MTV Converter 把这些步骤串成一条流水线：拖入视频 → 自动生成或导入伴奏 → 取词校对 → 一次编码输出双音轨成品。全程本地处理，原分辨率、音画对齐，输出为通用的 MP4。
 
 ## 主要功能
 
@@ -43,7 +43,7 @@ macOS 首次打开若被 Gatekeeper 拦截，右键「打开」或在「系统�
 
 ## 关于
 
-个人自用的桌面工具，基于 Electron + React + TypeScript 构建，支持 macOS（Apple Silicon）与 Windows（x64）。源码与许可信息见同目录文件。项目许可证为 `UNLICENSED`（仅供个人使用）。
+基于 Electron + React + TypeScript 构建，支持 macOS（Apple Silicon）与 Windows（x64）。源码采用 [MIT 许可证](LICENSE)，第三方组件的许可与用途说明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 ## 致谢
 
@@ -53,7 +53,7 @@ macOS 首次打开若被 Gatekeeper 拦截，右键「打开」或在「系统�
 - **audio-separator** — Nomad Karaoke 提供的可脚本化分离后端（MIT）
 - **FFmpeg / FFprobe** — GPL-3.0 构建，承担探测、编码与字幕烧录
 - **Noto Sans CJK SC** — Adobe / Google 的开源中文字体（SIL OFL 1.1）
-- **歌词服务** `lyric.photix.cc` — 提供在线歌词查询（声明不可商用，本工具仅作个人学习交流用途）
+- **歌词服务** `lyric.photix.cc` — 提供在线歌词查询（不可商用，本工具仅作个人学习交流用途）
 - **Electron / React / hls.js / zod / Vite / TypeScript / Vitest** — 构建与运行的基础设施
 
 各组件完整许可与用途说明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

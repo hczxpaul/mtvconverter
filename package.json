@@ -5,7 +5,7 @@
   "private": true,
   "main": "dist/main/main/index.js",
   "author": "MTV Converter",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
     "build:main": "tsc -p tsconfig.json",

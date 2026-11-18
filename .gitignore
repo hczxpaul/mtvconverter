@@ -19,6 +19,12 @@ archive/
 # 私有配置与密钥
 .env
 
+# 开发过程文档（不随源码发布，仅本地保留）
+.workbuddy/
+AGENTS.md
+handoff.md
+VALIDATION-WINDOWS.md
+
 # 测试素材与转换产物（体积大、含版权 MV，不入库）
 testdata/
 output/
