@@ -4,6 +4,8 @@ node_modules/
 node_modules.*/
 dist/
 release/
+# 发布归档（安装包 + 源码 zip + 校验清单），按需上传，不入库
+archive/
 *.tsbuildinfo
 
 # 本机状态与撤销备份（.trash/ 含旧 .app 打包备份，约 17 GB）
