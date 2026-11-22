@@ -97,17 +97,39 @@ function runtimeReady(execPath: string): boolean {
   return path.isAbsolute(execPath) ? fs.existsSync(execPath) : execPath.length > 0;
 }
 
+/**
+ * 推断 torch 侧设备（Roformer / Demucs 走 torch，与 ONNX provider 无关）。
+ * macOS Apple Silicon → MPS；分离后端已是 cuda（Windows NVIDIA）→ CUDA；其余 → CPU。
+ * HardwareProbe.detect 会用运行时探测结果覆盖本推断。
+ */
+export function inferTorchBackend(
+  platform: NodeJS.Platform,
+  arch: string,
+  separationBackend: Backend,
+): 'cuda' | 'mps' | 'cpu' {
+  if (platform === 'darwin' && arch === 'arm64') return 'mps';
+  if (separationBackend === 'cuda') return 'cuda';
+  return 'cpu';
+}
+
 function buildDecision(
   platform: NodeJS.Platform,
   arch: string,
   separationBackend: Backend,
   encodeEncoder: string,
+  av1Encoder: string,
   previewEncoder: string,
   reasonCode: string,
   reasonText: string,
   degraded: boolean,
 ): BackendDecision {
-  return { platform, arch, separationBackend, encodeEncoder, previewEncoder, reasonCode, reasonText, degraded };
+  const torchBackend = inferTorchBackend(platform, arch, separationBackend);
+  return {
+    platform, arch, separationBackend, encodeEncoder, av1Encoder, previewEncoder,
+    reasonCode, reasonText, degraded,
+    torchBackend,
+    roformerReady: torchBackend !== 'cpu',
+  };
 }
 
 /**
@@ -217,6 +239,7 @@ export async function detectBackend(
   let gpuEncode = '';
   let gpuPreview = '';
   let gpuHevc = '';
+  let av1Encoder = 'libsvtav1';
   let degradeReason = '';
 
   if (platform === 'win32' && gpuKind === 'nvidia') {
@@ -249,13 +272,30 @@ export async function detectBackend(
   }
 
   if (gpuPath) {
+    // AV1 硬件编码单独自检：只影响 AV1，HEVC 成功了没必要整体降级
+    if (gpuPath === 'cuda' && caps.av1Nvenc) {
+      const av1Ok = await selfTest('av1_nvenc');
+      logHardware(av1Ok ? 'info' : 'warn', 'hardware.probe.step', {
+        name: 'AV1 编码器 1 秒自检', ok: av1Ok, detail: 'av1_nvenc',
+        ...(av1Ok ? {} : { reasonCode: REASON.ENCODER_UNAVAILABLE }),
+      });
+      if (av1Ok) av1Encoder = 'av1_nvenc';
+    }
+
+    const hevcText = gpuPath === 'cuda'
+      ? (av1Encoder === 'av1_nvenc'
+        ? '已启用 NVIDIA CUDA 分离 + HEVC / AV1 NVENC 硬件编码'
+        : '已启用 NVIDIA CUDA 分离 + HEVC NVENC 硬件编码；AV1 仍走 CPU（av1_nvenc 自检未通过）')
+      : gpuPath === 'mps'
+        ? '已启用 Apple Silicon MPS 分离 + VideoToolbox 硬件编码（HEVC）；AV1 走 CPU'
+        : '已启用 DirectML 分离；主编码使用 libx265 / libsvtav1';
     const success: Record<'cuda' | 'directml' | 'mps', { code: string; text: string }> = {
-      cuda: { code: REASON.CUDA_OK, text: '已启用 NVIDIA CUDA 分离 + HEVC / NVENC 硬件编码' },
-      directml: { code: REASON.DIRECTML_OK, text: '已启用 DirectML 分离；主编码使用 libx265' },
-      mps: { code: REASON.MPS_OK, text: '已启用 Apple Silicon MPS 分离 + VideoToolbox 硬件编码' },
+      cuda: { code: REASON.CUDA_OK, text: hevcText },
+      directml: { code: REASON.DIRECTML_OK, text: hevcText },
+      mps: { code: REASON.MPS_OK, text: hevcText },
     };
     const info = success[gpuPath];
-    return buildDecision(platform, arch, gpuPath, gpuEncode, gpuPreview, info.code, info.text, false);
+    return buildDecision(platform, arch, gpuPath, gpuEncode, av1Encoder, gpuPreview, info.code, info.text, false);
   }
 
   // CPU 兜底：失败自动降级一次；CPU 模式本身也需可观测（degraded=true）
@@ -279,5 +319,5 @@ export async function detectBackend(
       ? `Intel Mac 不适用 MPS，按决策矩阵使用 CPU 模式：主编码 libx265、预览 ${cpuPreview}`
       : `未检出可用 GPU，使用 CPU 模式：主编码 libx265、预览 ${cpuPreview}`;
   }
-  return buildDecision(platform, arch, 'cpu', 'libx265', cpuPreview, reasonCode, reasonText, true);
+  return buildDecision(platform, arch, 'cpu', 'libx265', 'libsvtav1', cpuPreview, reasonCode, reasonText, true);
 }

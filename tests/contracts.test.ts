@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   STAGE_WEIGHTS, COMPRESSION_PRESETS, TRACK_METADATA, DEFAULTS,
-  DEFAULT_SUBTITLE_STYLE, makeDefaultConfig, IPC, crfFor,
+  DEFAULT_SUBTITLE_STYLE, makeDefaultConfig, IPC, crfFor, SEPARATION_MODELS,
 } from '../src/shared/contracts';
 
 describe('§4.2 阶段权重 STAGE_WEIGHTS', () => {
@@ -116,6 +116,13 @@ describe('makeDefaultConfig / 默认字幕样式 / IPC 通道', () => {
     expect(c.extension).toBe(DEFAULTS.extension);
     expect(c.compressionPreset).toBe(DEFAULTS.compressionPreset);
     expect(c.accompanimentSource).toBe('uvr');
+    expect(c.separationModel).toBe('');
+  });
+
+  it('§5.2.2 分离模型清单：默认 MDX + 两个 Roformer（后者要求 GPU）', () => {
+    expect(SEPARATION_MODELS[0].filename).toBe('UVR-MDX-NET-Inst_HQ_3.onnx');
+    expect(SEPARATION_MODELS.filter((m) => m.filename.endsWith('.ckpt')).length).toBe(2);
+    for (const m of SEPARATION_MODELS) expect(m.label.length).toBeGreaterThan(0);
   });
 
   it('默认关闭歌词 / 不烧录 / 详细模式关 / 歌词区默认折叠', () => {

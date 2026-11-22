@@ -81,6 +81,8 @@ async function bootstrap(): Promise<void> {
   hardware.setLogger(logger);
   // 分离后端只能按平台/显卡推断，注入运行时 provider 探测后由 detect() 校正为实际生效值
   hardware.setSeparationProviders(() => accompaniment.onnxProviders());
+  // Roformer 走 torch，可用性看 torch 设备而非 ONNX provider（macOS：ONNX=CPU 但 torch=MPS）
+  hardware.setTorchDevice(() => accompaniment.torchDevice());
 
   const ports: PipelinePorts = { media, accompaniment, lyrics, hardware, preview, presentation, logger, paths: config.paths };
 

@@ -46,17 +46,19 @@ def _install_provider_policy() -> None:
                 self.onnx_execution_provider = ["CPUExecutionProvider"]
             return
 
-        # Windows / Linux：ONNX 侧取第一个可用加速后端，都没有就 CPU
+        # Windows / Linux：torch 侧有 CUDA 就直接用（Roformer / Demucs 走 torch，
+        # 与 ONNX provider 无关；只在 CUDA EP 分支里设会把 Roformer 误钉在 CPU）。
+        try:
+            import torch
+            if torch.cuda.is_available():
+                self.torch_device = torch.device("cuda")
+        except Exception:  # noqa: BLE001 - torch 缺失/异常都不该阻断分离
+            pass
+
+        # ONNX 侧取第一个可用加速后端，都没有就 CPU
         for name in ("CUDAExecutionProvider", "DmlExecutionProvider"):
             if name in available:
                 self.onnx_execution_provider = [name]
-                if name == "CUDAExecutionProvider":
-                    try:
-                        import torch
-                        if torch.cuda.is_available():
-                            self.torch_device = torch.device("cuda")
-                    except Exception:  # noqa: BLE001 - torch 缺失/异常都不该阻断分离
-                        pass
                 return
         self.onnx_execution_provider = ["CPUExecutionProvider"]
 
@@ -64,7 +66,8 @@ def _install_provider_policy() -> None:
         setup_with_policy(self, system_info)
         # 显式把实际生效的 provider 打到 stderr：出问题时一眼能看出是 GPU 还是 CPU 在跑
         providers = getattr(self, "onnx_execution_provider", None)
-        print(f"[mtvc] ONNX execution provider = {providers}", file=sys.stderr, flush=True)
+        device = getattr(self, "torch_device", None)
+        print(f"[mtvc] torch device = {device}; ONNX execution provider = {providers}", file=sys.stderr, flush=True)
 
     Separator.setup_torch_device = setup_with_log
 

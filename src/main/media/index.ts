@@ -37,6 +37,12 @@ function qualityArgs(encoder: string, crf: number): string[] {
   //   cq=crf28 → 138% 源体积；cq=33 → 84%（≈ x265 crf28 的 85%），VMAF 94.7 vs 93.0。
   // 故按 cq = crf + 5 映射；同时必须显式 `-rc vbr -b:v 0`，否则残留的默认码率目标
   // 会把「恒定质量」顶成高码率（实测 -cq 28 不加 -b:v 0 也是 138%）。
+  // AV1 NVENC：实测（1080p / 20s / 同一无损参考）cq=crf+4 时体积约 +5%、VMAF 低约 1 分；
+  // cq=crf+5 体积持平但 VMAF 低约 1.5 分。取 +4 偏向画质；量程 0–63，不能套 HEVC 的 51 上限。
+  if (e === 'av1_nvenc') {
+    const cq = Math.min(63, Math.max(0, Math.round(crf) + 4));
+    return ['-rc', 'vbr', '-cq', String(cq), '-b:v', '0', '-preset', 'p5', '-tune', 'hq'];
+  }
   if (e.includes('nvenc')) {
     const cq = Math.min(51, Math.max(0, Math.round(crf) + 5));
     return ['-rc', 'vbr', '-cq', String(cq), '-b:v', '0', '-preset', 'p5', '-tune', 'hq'];
@@ -152,6 +158,7 @@ export class MediaAdapter implements MediaPort {
       libx264: encoders.has('libx264'),
       h264Videotoolbox: encoders.has('h264_videotoolbox'),
       h264Nvenc: encoders.has('h264_nvenc'),
+      av1Nvenc: encoders.has('av1_nvenc'),
       // libass 能力以 subtitles / ass 滤镜是否存在为准（本机 FFmpeg 8.1 实测缺 libass）
       libass: filters.has('subtitles') || filters.has('ass'),
       hlsMuxer: muxers.has('hls'),

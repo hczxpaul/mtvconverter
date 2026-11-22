@@ -116,7 +116,9 @@ export class PipelineController {
       } else {
         const selfTest = await this.ports.accompaniment.selfTest();
         if (!selfTest.ok) throw makeError('E_UVR_MODEL_MISSING', 'ACCOMPANIMENT', selfTest.reason);
-        rawAccompaniment = await this.ports.accompaniment.separate(originalWav, wd, backend, this.ports.paths.modelName);
+        // 用户在 L2 选了模型就用它；空字符串回退运行时默认（随包 MDX）
+        const separationModel = cfg.separationModel || this.ports.paths.modelName;
+        rawAccompaniment = await this.ports.accompaniment.separate(originalWav, wd, backend, separationModel);
       }
       this.jobs.markStageDone(jobId, 'ACCOMPANIMENT', { path: rawAccompaniment, source: cfg.accompanimentSource });
       checkCancel();
@@ -151,10 +153,12 @@ export class PipelineController {
         // 用户选择「覆盖源文件」时输出路径就是源路径。FFmpeg 不能边读边写同一文件，
         // 因此先编码到同目录的临时文件，成功后原子 rename 替换源文件。
         const replacingSource = resolve(outputPath) === resolve(cfg.sourcePath);
-        // AV1 目前全平台都没有硬件编码器，固定用 SVT-AV1；
-        // HEVC 才区分软/硬：用户选硬件且探测确实给出硬件编码器时才用，否则回落 libx265。
+        // 编码器按「格式 + 用户偏好 + 探测结果」三层决定：
+        // AV1 有 av1_nvenc（RTX 40）才上硬件，否则 SVT-AV1；
+        // HEVC 用户选硬件且探测确实给出硬件编码器才用，否则回落 libx265。
+        const av1HwReady = backend.av1Encoder === 'av1_nvenc';
         const encoder = cfg.videoCodec === 'av1'
-          ? 'libsvtav1'
+          ? (cfg.videoEncoder === 'hardware' && av1HwReady ? 'av1_nvenc' : 'libsvtav1')
           : cfg.videoEncoder === 'hardware' && backend.encodeEncoder !== 'libx265'
             ? backend.encodeEncoder
             : 'libx265';

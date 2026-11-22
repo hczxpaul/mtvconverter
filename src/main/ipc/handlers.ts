@@ -3,7 +3,7 @@ import { writeFileSync, readFileSync, existsSync, accessSync, mkdirSync, constan
 import { join, dirname, basename } from 'node:path';
 import { z } from 'zod';
 import {
-  IPC, makeDefaultConfig, type JobConfig, type StageCode,
+  IPC, makeDefaultConfig, normalizeNaming, pruneNaming, type JobConfig, type StageCode,
   type LyricsPayload, type PreviewRequest, type MediaCapabilities,
 } from '../../shared/contracts';
 import type { HealthResult, LyricsFetchInput } from '../../shared/preload-api';
@@ -31,12 +31,20 @@ const SubtitleSchema = z.object({
   outlineColor: z.string(), outlineWidth: z.number(),
   position: z.enum(['bottom', 'top']), bilingualLines: z.union([z.literal(1), z.literal(2)]),
 });
+const NamingSchema = z.object({
+  // 上限放宽到 12：界面限制 6 位，这里只挡异常输入，避免用户多写一格就整单失败
+  artists: z.array(z.string().max(200)).max(12),
+  title: z.string().max(200),
+  language: z.string().max(40),
+  version: z.string().max(40),
+});
 const ConfigSchema = z.object({
   sourcePath: z.string().min(1),
   originalAudioStreamIndex: z.number().int().optional(),
   // 允许为空：渲染层首次导入时还没有输出目录，由主进程按「源文件同目录」兜底
   outputDir: z.string(),
   outputName: z.string(),
+  naming: NamingSchema,
   outputConflict: z.enum(['suffix', 'overwrite']),
   outputSuffix: z.string().max(40),
   container: z.enum(['mp4', 'mkv']),
@@ -46,6 +54,7 @@ const ConfigSchema = z.object({
   compressionPreset: z.enum(['quality', 'balanced', 'size']),
   accompanimentSource: z.enum(['uvr', 'imported']),
   accompanimentPath: z.string().optional(),
+  separationModel: z.string().max(200),
   lyrics: LyricsSchema,
   subtitle: SubtitleSchema,
   skipReencodeIfHevc: z.boolean(),
@@ -157,7 +166,13 @@ export function registerIpc(ctx: AppContext): void {
   const readConfig = (): JobConfig => {
     try {
       if (existsSync(configFile)) {
-        const merged = { ...makeDefaultConfig(), ...JSON.parse(readFileSync(configFile, 'utf8')) } as JobConfig;
+        const raw = JSON.parse(readFileSync(configFile, 'utf8')) as Partial<JobConfig>;
+        // naming 要单独深合并：浅合并会把半截对象（缺 language / version）整块替换掉
+        const merged: JobConfig = {
+          ...makeDefaultConfig(), ...raw,
+          // 启动时折掉上次留下的空歌手格：默认就该只有 1 格
+          naming: pruneNaming(raw.naming),
+        } as JobConfig;
         return { ...alignExtension(migrateOnce(merged)), sourcePath: '' };
       }
     } catch { /* 损坏时回退默认值 */ }
@@ -231,6 +246,7 @@ export function registerIpc(ctx: AppContext): void {
     const next: JobConfig = {
       ...current,
       ...patch,
+      naming: normalizeNaming(patch.naming ?? current.naming),
       lyrics: { ...current.lyrics, ...(patch.lyrics ?? {}) },
       subtitle: { ...current.subtitle, ...(patch.subtitle ?? {}) },
     };

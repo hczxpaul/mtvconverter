@@ -126,6 +126,7 @@ export class AccompanimentAdapter implements AccompanimentPort {
   private active?: ProcHandle;
   private readonly notices: string[] = [];
   private providersCache?: string[];
+  private torchDeviceCache?: 'cuda' | 'mps' | 'cpu';
 
   /** 可选进度回调：仅在 stdout 解析出真实百分比时调用；解析不到不伪造、不调用。 */
   onProgress?: (percent: number, message: string) => void;
@@ -155,6 +156,38 @@ export class AccompanimentAdapter implements AccompanimentPort {
       // 运行时缺失 / Python 不可执行：交给 selfTest 报错，这里只返回空
     }
     return [];
+  }
+
+  /**
+   * 分离运行时 torch 侧真实可用设备（结果缓存，只探一次）。
+   * Roformer / Demucs 走 torch，与 ONNX provider 无关：macOS 上 ONNX 固定 CPU，
+   * 但 torch 是 MPS，Roformer 仍可硬件加速。探测失败按 cpu 处理，不臆测。
+   */
+  async torchDevice(): Promise<'cuda' | 'mps' | 'cpu'> {
+    if (this.torchDeviceCache) return this.torchDeviceCache;
+    try {
+      const handle = runProcess({
+        command: this.paths.uvrPython,
+        args: ['-c',
+          'import torch\n'
+          + 'if torch.cuda.is_available():\n'
+          + '    print("cuda")\n'
+          + 'elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():\n'
+          + '    print("mps")\n'
+          + 'else:\n'
+          + '    print("cpu")\n'],
+        timeoutMs: 60_000,
+      });
+      const r = await handle.wait();
+      if (r.code === 0) {
+        const out = r.stdout.trim().toLowerCase();
+        this.torchDeviceCache = out === 'cuda' ? 'cuda' : out === 'mps' ? 'mps' : 'cpu';
+        return this.torchDeviceCache;
+      }
+    } catch {
+      // 运行时缺失 / Python 不可执行：按 CPU 处理
+    }
+    return 'cpu';
   }
 
   /** 终止当前活动子进程树（UVR 分离 / 伴奏解码）。编排层取消任务时调用。 */

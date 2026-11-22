@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { statSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, basename, extname, resolve } from 'node:path';
+import { buildOutputStem } from '../../shared/contracts';
 import type {
   JobConfig, JobRecord, JobStatus, StageCode, RuntimePaths,
   JobProgressEvent, BackendDecision,
@@ -119,7 +120,11 @@ export class JobService {
   emitFallback(d: BackendDecision): void { this.events.fallback(d); }
 
   defaultOutputPath(config: JobConfig): string {
-    const base = config.outputName || `${basename(config.sourcePath, extname(config.sourcePath))}${config.extension}`;
+    // 结构化命名优先；没填完整时回退 outputName → 源文件名，保证旧配置与脚本调用不受影响
+    const namingStem = buildOutputStem(config.naming);
+    const base = namingStem
+      ? `${namingStem}${config.extension}`
+      : config.outputName || `${basename(config.sourcePath, extname(config.sourcePath))}${config.extension}`;
     const name = base.endsWith(config.extension) ? base : `${base}${config.extension}`;
     const full = join(config.outputDir, name);
     if (resolve(full) !== resolve(config.sourcePath)) return full;

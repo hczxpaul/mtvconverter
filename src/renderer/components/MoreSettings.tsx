@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { COMPRESSION_PRESETS } from '../../shared/contracts';
+import { COMPRESSION_PRESETS, SEPARATION_MODELS } from '../../shared/contracts';
 import type {
-  BackendDecision, CompressionPreset, JobConfig, OutputConflict, OutputContainer,
+  BackendDecision, CompressionPreset, JobConfig, OutputContainer,
   VideoCodec, VideoEncoderPreference,
 } from '../../shared/contracts';
 
@@ -27,11 +26,18 @@ export function MoreSettings({
   backend = null,
 }: Props) {
   // 「覆盖源文件」的二次确认：非模态，选中后先出确认条，点确认才真正生效
-  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   // 探测未完成时 backend 为 null：此时不臆断，保持可选；探测完成后按真实能力禁用
   const hwKnown = backend !== null;
-  const hwAvailable = hwKnown && backend.encodeEncoder !== '' && backend.encodeEncoder !== 'libx265';
-  const hwFallenBack = config.videoCodec === 'hevc' && hwKnown && !hwAvailable && config.videoEncoder === 'hardware';
+  const hevcHwAvailable = hwKnown && backend.encodeEncoder !== '' && backend.encodeEncoder !== 'libx265';
+  // AV1 只在 av1_nvenc 自检通过时才算「有硬件编码器」；macOS 没有 AV1 硬编，必然回落 CPU
+  const av1HwAvailable = hwKnown && backend.av1Encoder === 'av1_nvenc';
+  const hwAvailable = config.videoCodec === 'av1' ? av1HwAvailable : hevcHwAvailable;
+  const hwFallenBack = hwKnown && !hwAvailable && config.videoEncoder === 'hardware';
+  // Roformer 走 torch，可用性看 torchBackend（macOS 上 ONNX 是 CPU 但 torch 是 MPS，仍可用）；
+  // 探测未完成时不臆断，保持可选
+  const sepGpuReady = backend === null || backend.roformerReady !== false;
+  const torchLabel = backend?.torchBackend === 'mps' ? 'MPS'
+    : backend?.torchBackend === 'cuda' ? 'CUDA' : '';
   return (
     <div className="settings">
       <section className="settings__section">
@@ -56,6 +62,29 @@ export function MoreSettings({
             导入官方伴奏文件
           </label>
         </div>
+        {config.accompanimentSource === 'uvr' && (
+          <label className="field">
+            <span className="field__label">分离模型</span>
+            <select
+              className="select"
+              value={config.separationModel}
+              onChange={(e) => onPatch({ separationModel: e.target.value })}
+            >
+              <option value="">MDX-NET Inst HQ3（默认）</option>
+              {SEPARATION_MODELS.filter((m) => m.filename !== 'UVR-MDX-NET-Inst_HQ_3.onnx').map((m) => (
+                <option key={m.filename} value={m.filename} disabled={m.gpu && !sepGpuReady}>
+                  {m.label}{m.gpu && !sepGpuReady ? '（需 GPU / MPS 运行时）' : ''}
+                </option>
+              ))}
+            </select>
+            <span className="unit">
+              {!sepGpuReady
+                ? '未检测到可用的 torch 加速设备（CUDA / MPS）；Roformer 跑不动，先装 GPU 运行时'
+                : (SEPARATION_MODELS.find((m) => m.filename === config.separationModel)?.note
+                  ?? (torchLabel ? `CPU 就能跑，最快；Roformer 可走 ${torchLabel} 加速` : 'CPU 就能跑，最快；质量一般'))}
+            </span>
+          </label>
+        )}
         {config.accompanimentSource === 'imported' && (
           <div className="settings__row">
             <button className="btn btn--ghost btn--sm" type="button" onClick={onSelectAccompaniment}>
@@ -129,98 +158,35 @@ export function MoreSettings({
               <option value="mkv">MKV · 多轨道，兼容性差</option>
             </select>
           </label>
-          {/* 编码器只对 H.265 有意义：AV1 目前全平台都没有硬件编码器 */}
           <label className="field">
             <span className="field__label">速度</span>
             <select
               className="select"
-              value={config.videoCodec === 'av1' ? 'av1' : config.videoEncoder}
-              disabled={config.videoCodec === 'av1'}
-              title={config.videoCodec === 'av1' ? 'AV1 目前没有硬件编码器，只能用软件编码' : undefined}
+              value={config.videoEncoder}
               onChange={(e) => onPatch({ videoEncoder: e.target.value as VideoEncoderPreference })}
             >
-              {config.videoCodec === 'av1' ? (
-                <option value="av1">软件编码</option>
-              ) : (
-                <>
-                  <option value="software">画质优先（慢）</option>
-                  <option value="hardware" disabled={hwKnown && !hwAvailable}>
-                    {hwAvailable || !hwKnown ? '速度优先（画质略差）' : '速度优先 · 本机无硬件编码器'}
-                  </option>
-                </>
-              )}
+              <option value="software">
+                {config.videoCodec === 'av1' ? '软件编码 · SVT-AV1（慢）' : '画质优先 · 软件编码（慢）'}
+              </option>
+              <option value="hardware" disabled={hwKnown && !hwAvailable}>
+                {hwKnown && !hwAvailable
+                  ? '硬件编码 · 本机不可用'
+                  : config.videoCodec === 'av1'
+                    ? '硬件编码 · NVENC（快）'
+                    : '速度优先 · 硬件编码（快，画质略差）'}
+              </option>
             </select>
             {hwFallenBack && (
               <p className="note-inline" role="status">
-                本机没有可用的 HEVC 硬件编码器（{backend?.reasonText ?? '探测未通过'}），转换时会回落软件编码。
+                {config.videoCodec === 'av1'
+                  ? '本机没有可用的 AV1 硬件编码器，转换时会回落 SVT-AV1 软件编码。'
+                  : `本机没有可用的 HEVC 硬件编码器（${backend?.reasonText ?? '探测未通过'}），转换时会回落软件编码。`}
               </p>
             )}
           </label>
         </div>
 
-        {/* 默认输出目录就是源文件所在目录，扩展名相同必然重名，这里让用户决定怎么处理 */}
-        <div className="settings__row">
-          <label className="field">
-            <span className="field__label">与源文件重名时</span>
-            <select
-              className="select"
-              value={config.outputConflict}
-              onChange={(e) => {
-                const next = e.target.value as OutputConflict;
-                // 覆盖源文件需要在界面上二次确认。这里刻意不用 window.confirm：
-                // 同步模态会阻塞渲染线程并进入嵌套 runloop，macOS 下会增加 AppKit 异常的概率。
-                if (next === 'overwrite') {
-                  setConfirmOverwrite(true);
-                  return;
-                }
-                setConfirmOverwrite(false);
-                onPatch({ outputConflict: next });
-              }}
-            >
-              <option value="suffix">另存为（加后缀）</option>
-              <option value="overwrite">覆盖源文件</option>
-            </select>
-          </label>
-          {config.outputConflict === 'suffix' ? (
-            <label className="field">
-              <span className="field__label">后缀</span>
-              <input
-                className="input"
-                type="text"
-                maxLength={40}
-                value={config.outputSuffix}
-                placeholder="-伴奏版"
-                onChange={(e) => onPatch({ outputSuffix: e.target.value })}
-              />
-            </label>
-          ) : (
-            <p className="field__warn" role="alert">
-              转换成功后源 MV 会被替换，建议先备份
-            </p>
-          )}
-        </div>
-        {confirmOverwrite && (
-          <div className="field__confirm" role="group" aria-live="polite" aria-label="确认覆盖源文件">
-            <span>覆盖源文件会把原 MV 直接替换掉，无法恢复。</span>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => {
-                onPatch({ outputConflict: 'overwrite' });
-                setConfirmOverwrite(false);
-              }}
-            >
-              确认覆盖
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              onClick={() => setConfirmOverwrite(false)}
-            >
-              取消
-            </button>
-          </div>
-        )}
+        {/* 命名已显式化，不再暴露「同名冲突 / 后缀」；内部仍保留「加 -伴奏版、绝不覆盖源」兜底 */}
       </section>
 
       <section className="settings__section">

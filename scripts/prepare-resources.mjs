@@ -8,8 +8,10 @@
  *            【不写项目根目录任何文件】。本机 FFmpeg 8.1 实测缺 libass/subtitles，会如实报 missing。
  *   --fetch  按 manifest 的 url + sha256 联网下载模型/资源；支持 SHA256 校验、断点续传、失败重试。
  *            url 为空时给出可读提示而非静默跳过。结果以 JSON 打印到 stdout。
+ *   --fetch-optional  下载可选模型（Roformer 系列，约 610M + 871M）。体积大，与 --fetch 分开；
+ *            下载后可在「更多设置 → 分离模型」中选择，需 torch 加速（CUDA / MPS）。
  *
- * 用法：node scripts/prepare-resources.mjs --check | --fetch | --help
+ * 用法：node scripts/prepare-resources.mjs --check | --fetch | --fetch-optional | --setup-uvr | --help
  * 环境变量（与 .env.example / ConfigService 对齐，均可选）：
  *   MTVC_FFMPEG_PATH / MTVC_FFPROBE_PATH / MTVC_UVR_ROOT / MTVC_UVR_PYTHON
  *   MTVC_UVR_MODEL_DIR / MTVC_UVR_MODEL / MTVC_FONTS_DIR / MTVC_MODEL_BASE_URL
@@ -349,6 +351,40 @@ async function doFetch(manifest) {
   };
 }
 
+/**
+ * 下载可选模型（Roformer 系列，体积大，约 610M + 871M）。
+ * 与 --fetch 分开：默认安装只准备 MDX 默认模型，需要更强的伴奏质量时再执行本命令。
+ */
+async function doFetchOptional(manifest) {
+  const modelDir = buildPaths(manifest).modelDir;
+  const models = manifest.uvr.optionalModels || [];
+  if (!models.length) {
+    return {
+      generatedAt: new Date().toISOString(), mode: 'fetch-optional', modelDir,
+      summary: { total: 0, ok: 0, skipped: 0, failed: 0 },
+      results: [], conclusion: 'manifest 未配置 optionalModels，无需下载。',
+    };
+  }
+  process.stderr.write(`开始下载 ${models.length} 个可选模型（Roformer，体积较大），目标目录：${modelDir}\n`);
+  const results = [];
+  for (const m of models) {
+    process.stderr.write(`· 处理「${m.name}」…\n`);
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await fetchOne(m, modelDir));
+  }
+  const ok = results.filter((r) => r.status === 'ok').length;
+  const skipped = results.filter((r) => r.status === 'skipped').length;
+  const failed = results.filter((r) => r.status === 'failed').length;
+  const conclusion = failed
+    ? `${failed} 个可选模型下载失败；可稍后重跑 --fetch-optional（支持断点续传）。`
+    : `可选模型就绪 ${ok} 个，跳过 ${skipped} 个。在「更多设置 → 分离模型」中即可选择 Roformer。`;
+  return {
+    generatedAt: new Date().toISOString(), mode: 'fetch-optional', modelDir,
+    summary: { total: models.length, ok, skipped, failed },
+    results, conclusion,
+  };
+}
+
 // ── 运行时安装 ────────────────────────────────────────────────
 /** 选择可用的 Python 3.10–3.13（audio-separator 的支持区间）。 */
 function pickPython() {
@@ -510,6 +546,8 @@ function usage() {
                                                   装 GPU 版分离运行时（Windows: CUDA 版 torch + onnxruntime-gpu；
                                                   macOS 无 GPU 路径——CoreML 不支持 MDX 算子）
   node scripts/prepare-resources.mjs --fetch       按 manifest 的 url+sha256 联网下载模型（SHA256 校验 / 断点续传 / 失败重试）
+  node scripts/prepare-resources.mjs --fetch-optional
+                                                  下载可选模型（Roformer 系列，约 610M + 871M；需 torch 加速）
   node scripts/prepare-resources.mjs --help        显示本帮助
 
 环境变量（同 .env / ConfigService）：MTVC_USER_DATA / MTVC_UVR_PYTHON / MTVC_FFMPEG_PATH 等。
@@ -522,7 +560,7 @@ async function main() {
   const gpu = args.includes('--gpu');
   const arg = args.find((a) => a.startsWith('--') && a !== '--gpu');
   if (args.includes('--help') || args.includes('-h') || !arg) { usage(); if (!arg) process.exitCode = 1; return; }
-  if (arg !== '--check' && arg !== '--fetch' && arg !== '--setup-uvr') {
+  if (arg !== '--check' && arg !== '--fetch' && arg !== '--fetch-optional' && arg !== '--setup-uvr') {
     process.stderr.write(`未知参数：${arg}\n`);
     usage();
     process.exitCode = 1;
@@ -551,7 +589,9 @@ async function main() {
     return;
   }
 
-  const report = await doFetch(manifest);
+  const report = arg === '--fetch-optional'
+    ? await doFetchOptional(manifest)
+    : await doFetch(manifest);
   process.stdout.write(JSON.stringify(report, null, 2) + '\n');
   process.stderr.write(`\n${report.conclusion}\n`);
   process.exitCode = report.summary.failed > 0 ? 1 : 0;

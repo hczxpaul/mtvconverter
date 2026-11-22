@@ -4,7 +4,7 @@
  * 曾在 N 卡 Windows 机器上把 CPU 分离谎报成 cuda，这里锁住校正行为。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { reconcileSeparation } from '../src/main/hardware/detectors';
+import { reconcileSeparation, inferTorchBackend } from '../src/main/hardware/detectors';
 import { setHardwareLogger } from '../src/main/hardware/log';
 import type { BackendDecision } from '../src/shared/contracts';
 
@@ -63,5 +63,31 @@ describe('reconcileSeparation：用运行时 provider 校正分离后端', () =>
     );
     expect(out.separationBackend).toBe('cpu');
     expect(out.reasonText).toContain('分离实际走 CPU');
+  });
+});
+
+describe('inferTorchBackend：Roformer 的可用性看 torch，不看 ONNX', () => {
+  it('macOS Apple Silicon → mps（即便 ONNX 校正后是 cpu）', () => {
+    expect(inferTorchBackend('darwin', 'arm64', 'mps')).toBe('mps');
+    // 关键回归：reconcileSeparation 把 separationBackend 校正为 cpu 后，
+    // torch 仍是 mps，Roformer 不应被误禁
+    expect(inferTorchBackend('darwin', 'arm64', 'cpu')).toBe('mps');
+  });
+
+  it('Windows NVIDIA（分离后端 cuda）→ cuda', () => {
+    expect(inferTorchBackend('win32', 'x64', 'cuda')).toBe('cuda');
+  });
+
+  it('Windows 无 GPU / 分离后端非 cuda → cpu', () => {
+    expect(inferTorchBackend('win32', 'x64', 'cpu')).toBe('cpu');
+    expect(inferTorchBackend('win32', 'x64', 'directml')).toBe('cpu');
+  });
+
+  it('macOS Intel → cpu', () => {
+    expect(inferTorchBackend('darwin', 'x64', 'cpu')).toBe('cpu');
+  });
+
+  it('Linux → cpu', () => {
+    expect(inferTorchBackend('linux', 'x64', 'cpu')).toBe('cpu');
   });
 });

@@ -19,6 +19,7 @@
     "verify:e2e": "node scripts/e2e-pipeline.mjs",
     "resources:check": "node scripts/prepare-resources.mjs --check",
     "resources:fetch": "node scripts/prepare-resources.mjs --fetch",
+    "resources:fetch-optional": "node scripts/prepare-resources.mjs --fetch-optional",
     "resources:setup-uvr": "node scripts/prepare-resources.mjs --setup-uvr",
     "resources:setup-uvr:gpu": "node scripts/prepare-resources.mjs --setup-uvr --gpu",
     "dist:mac": "npm run build && electron-builder --mac --dir",

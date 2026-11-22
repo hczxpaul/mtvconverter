@@ -187,6 +187,8 @@ export interface MediaCapabilities {
   libx264: boolean;
   h264Videotoolbox: boolean;
   h264Nvenc: boolean;
+  /** AV1 硬件编码（RTX 40 系 NVENC）；macOS 目前没有 AV1 硬件编码器 */
+  av1Nvenc: boolean;
   libass: boolean;
   hlsMuxer: boolean;
 }
@@ -213,12 +215,136 @@ export interface SubtitleStyle {
   bilingualLines: 1 | 2;
 }
 
+/**
+ * 输出命名的结构化输入：每位歌手一个元素，不存拼接后的字符串。
+ * 名字本身可能含 `&`，先拼字符串再拆会把一个人拆成两个人。
+ */
+export interface NamingConfig {
+  /** 至少一位非空才算填写完成；空字符串项由界面保留为「空输入格」 */
+  artists: string[];
+  title: string;
+  /** 空字符串 = 不标注语言 */
+  language: string;
+  /** 空字符串 / 「普通版」= 不写版本标签 */
+  version: string;
+}
+
+export const NAMING_LIMITS = {
+  /** 只限制人数：歌手名/歌名不设人为字数上限，能打多长就多长 */
+  maxArtists: 6,
+} as const;
+
+export const DEFAULT_NAMING: NamingConfig = {
+  artists: [''],
+  title: '',
+  language: '',
+  version: '',
+};
+
+/** 旧配置或半截对象补齐成完整形状，避免调用方到处写 `?? ''`。 */
+export function normalizeNaming(naming?: Partial<NamingConfig> | null): NamingConfig {
+  const artists = Array.isArray(naming?.artists) ? naming!.artists.filter((s) => typeof s === 'string') : [''];
+  return {
+    artists: artists.length > 0 ? artists : [''],
+    title: typeof naming?.title === 'string' ? naming.title : '',
+    language: typeof naming?.language === 'string' ? naming.language : '',
+    version: typeof naming?.version === 'string' ? naming.version : '',
+  };
+}
+
+/**
+ * 启动 / 提交任务前用：把尾部空歌手格折掉，只保留 1 个空位。
+ * 编辑过程中不能用（会把刚点 + 出来的空格立刻吃掉）。
+ */
+export function pruneNaming(naming?: Partial<NamingConfig> | null): NamingConfig {
+  const n = normalizeNaming(naming);
+  const artists = [...n.artists];
+  while (artists.length > 1 && !artists[artists.length - 1].trim()) artists.pop();
+  return { ...n, artists };
+}
+
+/** 文件名非法字符替换为空格：Windows 全平台禁止，POSIX 上跨设备复制同样会炸。 */
+export function sanitizeFileNamePart(input: string): string {
+  return input
+    .replace(/[\\/:*?"<>|\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[. ]+/, '')
+    .replace(/[. ]+$/, '')
+    .trim();
+}
+
+/**
+ * 按「歌手 - 歌曲名 [语言] [版本]」拼出不含扩展名的主干。
+ * 任一必填项缺失返回空字符串，调用方回退 `outputName` → 源文件名。
+ */
+export function buildOutputStem(naming?: Partial<NamingConfig> | null): string {
+  const n = normalizeNaming(naming);
+  const artists = n.artists.map((s) => sanitizeFileNamePart(s)).filter(Boolean);
+  const title = sanitizeFileNamePart(n.title);
+  if (artists.length === 0 || !title) return '';
+  const parts = [`${artists.join(' & ')} - ${title}`];
+  const language = sanitizeFileNamePart(n.language);
+  const version = sanitizeFileNamePart(n.version);
+  if (language) parts.push(`[${language}]`);
+  if (version && version !== '普通版') parts.push(`[${version}]`);
+  return parts.join(' ');
+}
+
+/** 返回给用户看的第一条问题；null 表示可以开始转换。 */
+export function namingProblem(naming?: Partial<NamingConfig> | null): string | null {
+  const n = normalizeNaming(naming);
+  const artists = n.artists.map((s) => s.trim()).filter(Boolean);
+  const title = n.title.trim();
+  if (artists.length === 0 && !title) return '还差歌手、歌曲名';
+  if (artists.length === 0) return '还差歌手';
+  if (!title) return '还差歌曲名';
+  if (artists.length > NAMING_LIMITS.maxArtists) return `歌手最多 ${NAMING_LIMITS.maxArtists} 位`;
+  return null;
+}
+
+/** 可选分离模型：filename 直接传给 audio-separator 的 -m。 */
+export interface SeparationModelOption {
+  filename: string;
+  label: string;
+  note: string;
+  /** 是否必须 GPU 才能在可接受时间内跑完 */
+  gpu: boolean;
+}
+
+export const SEPARATION_MODELS: SeparationModelOption[] = [
+  {
+    filename: 'UVR-MDX-NET-Inst_HQ_3.onnx',
+    label: 'MDX-NET Inst HQ3（默认）',
+    note: 'CPU 就能跑，最快；质量一般',
+    gpu: false,
+  },
+  {
+    filename: 'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+    label: 'BS-Roformer Viperx 1297',
+    note: '通用最强；需 torch 加速（CUDA / MPS），首次运行会下载模型',
+    gpu: true,
+  },
+  {
+    filename: 'mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt',
+    label: 'Mel-Roformer Karaoke（保留和声）',
+    note: '专为伴奏 / 卡拉OK 调；需 torch 加速（CUDA / MPS），首次运行会下载模型',
+    gpu: true,
+  },
+];
+
+export function separationModelLabel(filename: string): string {
+  return SEPARATION_MODELS.find((m) => m.filename === filename)?.label ?? filename;
+}
+
 export interface JobConfig {
   sourcePath: string;
   /** 非单轨输入经用户确认后指定的原唱音轨（全局 stream index）；单轨输入为 undefined。 */
   originalAudioStreamIndex?: number;
   outputDir: string;
+  /** 手工指定的完整文件名或主干；naming 填完整时以 naming 为准 */
   outputName: string;
+  /** 结构化输出命名（歌手 / 歌曲名 / 语言 / 版本） */
+  naming: NamingConfig;
   /** 输出路径与源文件同名时怎么办：默认加后缀，允许用户显式选择覆盖源文件 */
   outputConflict: OutputConflict;
   /** outputConflict === 'suffix' 时使用的后缀（不含扩展名），默认「-伴奏版」 */
@@ -232,6 +358,8 @@ export interface JobConfig {
   compressionPreset: CompressionPreset;
   accompanimentSource: AccompanimentSource;
   accompanimentPath?: string;
+  /** 分离模型文件名；空字符串 = 运行时默认（MDX-NET Inst HQ3） */
+  separationModel: string;
   lyrics: LyricsConfig;
   subtitle: SubtitleStyle;
   skipReencodeIfHevc: boolean;
@@ -309,7 +437,10 @@ export interface BackendDecision {
   platform: NodeJS.Platform;
   arch: string;
   separationBackend: Backend;
+  /** HEVC 主编码器（hevc_nvenc / hevc_videotoolbox / libx265） */
   encodeEncoder: string;
+  /** AV1 主编码器（av1_nvenc / libsvtav1）；缺省按 libsvtav1 处理 */
+  av1Encoder?: string;
   previewEncoder: string;
   reasonCode: string;
   reasonText: string;
@@ -320,6 +451,17 @@ export interface BackendDecision {
    * 编排层用运行时探测结果回填本字段，并把 separationBackend 校正为实际生效的后端。
    */
   separationProvider?: string;
+  /**
+   * 分离运行时 **torch** 侧可用设备。Roformer / Demucs 走 torch，与 ONNX provider 无关：
+   * macOS 上 ONNX 固定 CPU（CoreML 不支持 MDX 算子），但 torch 是 MPS，Roformer 仍可加速。
+   * 缺省按 cpu 处理。
+   */
+  torchBackend?: 'cuda' | 'mps' | 'cpu';
+  /**
+   * Roformer 类模型当前是否可用。**取决于 torch 后端**（cuda / mps 即可用），
+   * 不能拿 ONNX 的 separationBackend 判定——那是 MDX 的路径。
+   */
+  roformerReady?: boolean;
 }
 
 export interface PreviewRequest {
@@ -510,6 +652,7 @@ export function makeDefaultConfig(sourcePath = '', outputDir = ''): JobConfig {
     sourcePath,
     outputDir,
     outputName: '',
+    naming: { ...DEFAULT_NAMING, artists: [...DEFAULT_NAMING.artists] },
     outputConflict: DEFAULTS.outputConflict,
     outputSuffix: DEFAULTS.outputSuffix,
     container: DEFAULTS.container,
@@ -518,6 +661,7 @@ export function makeDefaultConfig(sourcePath = '', outputDir = ''): JobConfig {
     videoEncoder: DEFAULTS.videoEncoder,
     compressionPreset: DEFAULTS.compressionPreset,
     accompanimentSource: 'uvr',
+    separationModel: '',
     lyrics: {
       enabled: false,
       source: 'online',

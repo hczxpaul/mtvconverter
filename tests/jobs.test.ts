@@ -42,11 +42,11 @@ function makeMocks(cacheDir: string) {
   const caps = {
     ffmpegPath: 'ffmpeg', ffprobePath: 'ffprobe', libx265: true,
     hevcVideotoolbox: true, hevcNvenc: false, libx264: true,
-    h264Videotoolbox: true, h264Nvenc: false, libass: false, hlsMuxer: true,
+    h264Videotoolbox: true, h264Nvenc: false, av1Nvenc: false, libass: false, hlsMuxer: true,
   };
   const backend = {
     platform: process.platform, arch: process.arch, separationBackend: 'cpu',
-    encodeEncoder: 'libx265', previewEncoder: 'libx264',
+    encodeEncoder: 'libx265', av1Encoder: 'libsvtav1', previewEncoder: 'libx264',
     reasonCode: '', reasonText: '', degraded: false,
   };
   const report = {
@@ -123,6 +123,24 @@ describe('JobService / PipelineController 状态机（mock 端口）', () => {
     it('自定义 outputName 与源同名时同样加后缀', () => {
       const c = cfg({ sourcePath: SRC, outputDir: MUSIC, extension: '.mp4', outputName: '歌' });
       expect(jobs.defaultOutputPath(c)).toBe(join(MUSIC, '歌-伴奏版.mp4'));
+    });
+
+    it('naming 填完整时按「歌手 - 歌曲名 [语言] [版本]」命名', () => {
+      const c = cfg({
+        sourcePath: SRC, outputDir: join('/tmp', 'out'), extension: '.mp4', outputName: '',
+        naming: { artists: ['刘德华', '舒淇'], title: 'I DO', language: '国语', version: '演唱会' },
+      });
+      expect(jobs.defaultOutputPath(c)).toBe(
+        join('/tmp', 'out', '刘德华 & 舒淇 - I DO [国语] [演唱会].mp4'),
+      );
+    });
+
+    it('naming 未填完整时回退 outputName，不产出半截文件名', () => {
+      const c = cfg({
+        sourcePath: SRC, outputDir: join('/tmp', 'out'), extension: '.mp4', outputName: '歌',
+        naming: { artists: ['费玉清'], title: '', language: '国语', version: '' },
+      });
+      expect(jobs.defaultOutputPath(c)).toBe(join('/tmp', 'out', '歌.mp4'));
     });
 
     it('扩展名与源不同时不加后缀（输出 .mkv）', () => {

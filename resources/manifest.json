@@ -55,7 +55,7 @@
           "torch": { "version": "2.14.1+cu126", "indexUrl": "https://download.pytorch.org/whl/cu126" },
           "packages": ["onnxruntime-gpu"],
           "requires": "NVIDIA 驱动 ≥ 525（CUDA 12.6 运行时由 torch 的 nvidia-* 依赖自带）；磁盘约 +5GB",
-          "note": "用 `--setup-uvr --gpu` 安装。实测（RTX 4070 Ti SUPER / 60s 素材 / MDX-NET-Inst_HQ_3）：只把 ONNX 放上 CUDA（torch 仍 CPU）时 CUDA 27–28s vs CPU 27–30s，基本持平——瓶颈在 numpy/STFT/落盘而不在卷积网络；DirectML 更差，MDX 推理时 ORT 内部直接报错。因此默认不装 GPU，只有换 demucs 等 torch 系模型时才值得。完整 CUDA 链路（torch 也上 GPU）未能在本机验证：nvidia 依赖约 2.5GB，本机下载 <60KB/s。"
+          "note": "用 `--setup-uvr --gpu` 安装；官方源常限速，可直接下 cu126 wheel 后本地 pip install。实测（RTX 4070 Ti SUPER / 45s 素材）：BS-Roformer 1297 分离 14s（整进程 21s）、Mel-Roformer Karaoke 6s（14s）。MDX 系列即使 ONNX 走 CUDA 也与 CPU 持平（27–28s vs 27–30s），所以 GPU 只对 Roformer / Demucs 有意义。onnxruntime-gpu 1.32 会报缺 cudart64_13.dll（其 CUDA EP 不可用），但 Roformer 走 torch，不影响分离。"
         }
       },
       "note": "运行时安装在 userData（可写），不在只读的 app 包内。macOS 上 torch 走 MPS，但 ONNX 侧固定 CPU：CoreML 不支持 MDX 算子（实测 error code -1）。Windows 上 ONNX 侧按 CUDA → DirectML → CPU 自适应，由 resources/uvr/launch_separator.py 决定；DirectML 实测在 MDX 上会抛 ORT 内部错误，故不作为默认。audioread 必须显式装：audio-separator 0.48 的 uvr_lib_v5.spec_utils 直接 import 它，但依赖里没声明，librosa≥1.0 也不再带。"
@@ -67,6 +67,22 @@
         "name": "UVR-MDX-NET-Inst_HQ_3.onnx",
         "sha256": "317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc",
         "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"
+      }
+    ],
+    "optionalModels": [
+      {
+        "name": "model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+        "config": "model_bs_roformer_ep_317_sdr_12.9755.yaml",
+        "sha256": "5b84f37e8d444c8cb30c79d77f613a41c05868ff9c9ac6c7049c00aefae115aa",
+        "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+        "note": "BS-Roformer Viperx 1297，通用最强；torch/CUDA"
+      },
+      {
+        "name": "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+        "config": "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956_config.yaml",
+        "sha256": "1de20d459332fe8869aeb01327a31df0032262706e1365114e852dc271779813",
+        "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+        "note": "Karaoke 专用（保留伴唱和声）；torch/CUDA"
       }
     ],
     "attribution": "Ultimate Vocal Remover 模型（Anjok07 / aufr33 训练，MIT）；分离 CLI 使用 audio-separator。第三方使用其模型须署名 UVR 及开发者。"

@@ -15,6 +15,8 @@ export class HardwareProbe extends EventEmitter implements HardwarePort {
   private readonly paths: RuntimePaths;
   /** 分离运行时真实 provider 的来源（由组装层注入）；未注入时不做校正 */
   private providers?: () => Promise<string[]>;
+  /** 分离运行时真实 torch 设备来源（Roformer 走 torch，决定 roformerReady） */
+  private torchDevice?: () => Promise<'cuda' | 'mps' | 'cpu'>;
 
   constructor(paths: RuntimePaths) {
     super();
@@ -35,15 +37,33 @@ export class HardwareProbe extends EventEmitter implements HardwarePort {
     this.providers = fn;
   }
 
+  /**
+   * 注入 torch 设备探测。Roformer / Demucs 走 torch，与 ONNX provider 无关：
+   * macOS 上 ONNX 是 CPU 但 torch 是 MPS，Roformer 仍可硬件加速——本注入用于把
+   * 「推断」校成「事实」，避免 UI 用 ONNX 后端误禁 Roformer。
+   */
+  setTorchDevice(fn: () => Promise<'cuda' | 'mps' | 'cpu'>): void {
+    this.torchDevice = fn;
+  }
+
   async detect(caps: MediaCapabilities): Promise<BackendDecision> {
     const detected = await detectBackend(this.paths, caps, (encoder) => this.selfTestEncoder(encoder));
     const providers = this.providers ? await this.providers() : [];
-    const decision = reconcileSeparation(detected, providers);
+    const reconciled = reconcileSeparation(detected, providers);
+    // torch 设备以运行时事实为准（Roformer 的可用性看它，而不是 ONNX 的 separationBackend）
+    const torchBackend = this.torchDevice ? await this.torchDevice() : reconciled.torchBackend;
+    const decision: BackendDecision = {
+      ...reconciled,
+      ...(torchBackend ? { torchBackend } : {}),
+      roformerReady: (torchBackend ?? 'cpu') !== 'cpu',
+    };
     logHardware(decision.degraded ? 'warn' : 'info', 'hardware.detect.result', {
       platform: decision.platform,
       arch: decision.arch,
       separationBackend: decision.separationBackend,
       separationProvider: decision.separationProvider,
+      torchBackend: decision.torchBackend,
+      roformerReady: decision.roformerReady,
       encodeEncoder: decision.encodeEncoder,
       previewEncoder: decision.previewEncoder,
       reasonCode: decision.reasonCode,

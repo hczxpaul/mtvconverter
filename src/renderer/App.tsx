@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { makeDefaultConfig } from '../shared/contracts';
+import { makeDefaultConfig, namingProblem, pruneNaming } from '../shared/contracts';
 import { toAssText } from '../shared/ass';
 import type {
   AppErrorPayload, AudioTrack, BackendDecision, EditCommand, JobConfig, JobProgressEvent,
   JobRecord, LogEntry, LyricsConfig, LyricsPayload, LyricsStatus, MediaCapabilities,
-  LyricLine,
+  LyricLine, NamingConfig,
   PreviewSession, PreviewSource, StageCode, SubtitleStyle, ValidationReport,
 } from '../shared/contracts';
 import type { HealthResult, LyricsFetchInput, MtvBridge } from '../shared/preload-api';
@@ -17,6 +17,7 @@ import { DetailsDrawer } from './components/DetailsDrawer';
 import { DropZone } from './components/DropZone';
 import { LyricsPanel } from './components/LyricsPanel';
 import { LyricsTimeline } from './components/LyricsTimeline';
+import { NamingPanel } from './components/NamingPanel';
 import { useLyricsColumnWidth } from './hooks/useLyricsColumnWidth';
 import { ColumnResizer } from './components/ColumnResizer';
 import { COL_GAP_PX, COL_MIN_PX, maxLyricsWidth, maxSideWidth } from './components/columnWidth';
@@ -202,6 +203,11 @@ export function App() {
     [patchConfig, config.subtitle],
   );
 
+  const handleNamingChange = useCallback(
+    (naming: NamingConfig) => patchConfig({ naming }),
+    [patchConfig],
+  );
+
   const handleLyricsToggle = useCallback(() => {
     patchConfig({ lyricsExpanded: !config.lyricsExpanded });
   }, [config.lyricsExpanded, patchConfig]);
@@ -217,7 +223,8 @@ export function App() {
   // ── 导入与主流程 ────────────────────────────────────────────
   const handleVideoPath = useCallback(
     async (path: string) => {
-      const next: JobConfig = { ...config, sourcePath: path };
+      // 换文件时顺手折掉上次留下的空歌手格，避免一进来就是一排空框
+      const next: JobConfig = { ...config, sourcePath: path, naming: pruneNaming(config.naming) };
       setConfig(next);
       setSourceUnreadable(false);
       setNotice('');
@@ -255,7 +262,7 @@ export function App() {
     setProgress(null);
     setReport(null);
     try {
-      const created = await mtv.jobCreate(config);
+      const created = await mtv.jobCreate({ ...config, naming: pruneNaming(config.naming) });
       setJob(created);
       await mtv.jobStart(created.id);
       setNotice('');
@@ -406,15 +413,18 @@ export function App() {
   // ── 派生展示 ────────────────────────────────────────────────
   const shownLyricsStatus: LyricsStatus =
     config.lyrics.burn && lyricsStatus === 'READY' ? 'BURN_CONFIRMED' : lyricsStatus;
+  // 命名缺失要说清缺什么，别等点了开始才在 WARN 里发现
+  const namingIssue = namingProblem(config.naming);
 
   const statusText = useMemo(() => {
     // notice 走底部独立提示条，不再覆盖主状态
     if (!job) {
-      return config.sourcePath ? '准备好了，点「开始转换」' : '先把一个 MV 拖进来';
+      if (!config.sourcePath) return '先把一个 MV 拖进来';
+      return namingIssue ?? '准备好了，点「开始转换」';
     }
     switch (job.status) {
       case 'DRAFT':
-        return '准备好了，点「开始转换」';
+        return namingIssue ?? '准备好了，点「开始转换」';
       case 'QUEUED':
         return '正在排队…';
       case 'RUNNING':
@@ -434,7 +444,7 @@ export function App() {
       default:
         return '';
     }
-  }, [job, config.sourcePath, progress?.stage, report]);
+  }, [job, config.sourcePath, namingIssue, progress?.stage, report]);
 
   const percent = useMemo(() => {
     if (!job) return null;
@@ -833,6 +843,11 @@ export function App() {
               onSelect={handleSelectVideo}
               onDropPath={handleVideoPath}
             />
+            <NamingPanel
+              naming={config.naming}
+              extension={config.extension}
+              onChange={handleNamingChange}
+            />
             <LyricsPanel
               expanded={config.lyricsExpanded}
               onToggle={handleLyricsToggle}
@@ -936,7 +951,7 @@ export function App() {
           stageCode={job?.stage ?? progress?.stage ?? null}
           outputMeta={outputMeta}
           notice={notice || undefined}
-          canStart={ready && Boolean(config.sourcePath) && !busy && !sourceUnreadable}
+          canStart={ready && Boolean(config.sourcePath) && !busy && !sourceUnreadable && namingIssue === null}
           onStart={handleStart}
           onCancel={handleCancel}
           onDetails={handleDetails}

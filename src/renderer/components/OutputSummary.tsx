@@ -2,7 +2,7 @@
  * 输出摘要：把原本只藏在「更多设置」抽屉里的关键决策提到左栏常驻。
  * 只读 config / report，不写状态；所有数值都来自真实数据，没有则显示占位。
  */
-import { COMPRESSION_PRESETS, crfFor } from '../../shared/contracts';
+import { COMPRESSION_PRESETS, buildOutputStem, crfFor } from '../../shared/contracts';
 import type { BackendDecision, JobConfig, ValidationReport } from '../../shared/contracts';
 
 interface Props {
@@ -29,14 +29,16 @@ export function OutputSummary({ config, report, onOpenSettings, backend = null }
   const crf = crfFor(config.videoCodec, config.compressionPreset);
   // 摘要必须写「实际会用哪个编码器」：选了硬件但本机没有时，说硬件就是撒谎
   const hwUsable = backend !== null && backend.encodeEncoder !== '' && backend.encodeEncoder !== 'libx265';
+  const av1HwUsable = backend?.av1Encoder === 'av1_nvenc';
   const encoderLabel = config.videoCodec === 'av1'
-    ? 'AV1 · SVT-AV1' // AV1 只有软件编码，不必再说一遍
+    ? config.videoEncoder === 'hardware'
+      ? (av1HwUsable ? 'AV1 · NVENC（硬件）' : 'AV1 · 硬件不可用，走软件')
+      : 'AV1 · SVT-AV1（软件）'
     : config.videoEncoder === 'hardware'
       ? (hwUsable ? `H.265 · 硬件（${backend?.encodeEncoder}）` : 'H.265 · 硬件不可用，走软件')
       : 'H.265 · 软件';
-  const naming = config.outputConflict === 'overwrite'
-    ? '同名时覆盖源文件'
-    : `同名时加「${config.outputSuffix?.trim() || '-伴奏版'}」`;
+  const stem = buildOutputStem(config.naming);
+  const fileName = stem ? `${stem}${config.extension}` : '与源文件同名';
   const subtitle = config.lyrics.enabled
     ? `${VERSION_LABEL[config.lyrics.version] ?? config.lyrics.version} · ${config.subtitle.bilingualLines} 行 · ${config.subtitle.fontSize}px${config.lyrics.burn ? ' · 烧录' : ' · 不烧录'}`
     : '未启用';
@@ -53,9 +55,9 @@ export function OutputSummary({ config, report, onOpenSettings, backend = null }
         <button className="linkbtn" type="button" onClick={onOpenSettings}>更多设置</button>
       </div>
       <dl className="kv kv--tight">
+        <dt>文件名</dt><dd title={fileName}>{fileName}</dd>
         <dt>格式</dt><dd>{config.extension} · {preset.label} CRF {crf}</dd>
         <dt>编码</dt><dd>{encoderLabel}</dd>
-        <dt>命名</dt><dd>{naming}</dd>
         <dt>字幕</dt><dd>{subtitle}</dd>
         <dt>音轨</dt><dd>原唱（默认）+ 伴奏</dd>
         <dt>体积</dt><dd>{ratio}</dd>
