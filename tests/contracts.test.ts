@@ -150,9 +150,13 @@ describe('makeDefaultConfig / 默认字幕样式 / IPC 通道', () => {
     expect(new Set(all).size).toBe(all.length); // 无重复通道名
   });
 
-  it('默认编码格式为 AV1（同画质比 H.265 省约 36%）', () => {
-    expect(DEFAULTS.videoCodec).toBe('av1');
-    expect(makeDefaultConfig().videoCodec).toBe('av1');
+  it('默认硬件优先：HEVC + 硬件编码，探测不到硬件时由编码层自动回落软件', () => {
+    // HEVC 在 macOS(Apple Silicon) / Windows(NVIDIA) 均有硬编；AV1 在 Apple Silicon 无硬编，
+    // 作为「更省体积」的可选项保留，不设默认。
+    expect(DEFAULTS.videoCodec).toBe('hevc');
+    expect(DEFAULTS.videoEncoder).toBe('hardware');
+    expect(makeDefaultConfig().videoCodec).toBe('hevc');
+    expect(makeDefaultConfig().videoEncoder).toBe('hardware');
   });
 
   it('CRF 按编码格式取：AV1 用 0–63 量纲，不能直接套 x265 的档位', () => {

@@ -5,7 +5,7 @@ import type {
   PresentationPort, JobConfig, JobRecord, StageCode, RuntimePaths,
   ValidationReport, LyricsPayload, BackendDecision, MediaInfo,
 } from '../../shared/contracts';
-import { STAGE_WEIGHTS, crfFor } from '../../shared/contracts';
+import { STAGE_WEIGHTS, crfFor, AUTO_HW_SEPARATION_MODEL } from '../../shared/contracts';
 import { JobService } from './JobService';
 import type { Logger } from '../errors/Logger';
 import { makeError, toPayload } from '../errors/AppError';
@@ -116,8 +116,12 @@ export class PipelineController {
       } else {
         const selfTest = await this.ports.accompaniment.selfTest();
         if (!selfTest.ok) throw makeError('E_UVR_MODEL_MISSING', 'ACCOMPANIMENT', selfTest.reason);
-        // 用户在 L2 选了模型就用它；空字符串回退运行时默认（随包 MDX）
-        const separationModel = cfg.separationModel || this.ports.paths.modelName;
+        // 用户在 L2 显式选了模型就用它；空字符串 = 自动：
+        // 优先能走 torch 硬件加速的模型（Roformer），torch 不可用时回落运行时默认（MDX / ONNX CPU）。
+        const separationModel = cfg.separationModel
+          || (backend.roformerReady && AUTO_HW_SEPARATION_MODEL
+            ? AUTO_HW_SEPARATION_MODEL
+            : this.ports.paths.modelName);
         rawAccompaniment = await this.ports.accompaniment.separate(originalWav, wd, backend, separationModel);
       }
       this.jobs.markStageDone(jobId, 'ACCOMPANIMENT', { path: rawAccompaniment, source: cfg.accompanimentSource });

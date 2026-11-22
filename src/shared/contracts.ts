@@ -89,11 +89,11 @@ export const TRACK_METADATA = {
 export const DEFAULTS = {
   container: 'mp4' as OutputContainer,
   extension: '.mp4',
-  // 默认走软件编码：实测同等体积下 libx265 画质明显优于 VideoToolbox
-  // （1204 kbps 达 VMAF 93.7 vs 硬件需 2700 kbps 才 97），代价是编码慢约 4 倍
-  // 默认 AV1：同画质比 H.265 省约 26%，且 SVT-AV1 preset 8 比 x265 fast 更快
-  videoCodec: 'av1' as VideoCodec,
-  videoEncoder: 'software' as VideoEncoderPreference,
+  // 默认「硬件优先」：HEVC 在 macOS(Apple Silicon) 与 Windows(NVIDIA) 都有硬件编码器，
+  // 探测不到时编码层自动回落 libx265（见 PipelineController 的三层选择）。
+  // 想要更小体积时手动切 AV1（同画质约省 36%，但 Apple Silicon 无 AV1 硬编，只能软件）。
+  videoCodec: 'hevc' as VideoCodec,
+  videoEncoder: 'hardware' as VideoEncoderPreference,
   outputConflict: 'suffix' as OutputConflict,
   outputSuffix: '-伴奏版',
   videoTag: 'hvc1',
@@ -335,6 +335,13 @@ export const SEPARATION_MODELS: SeparationModelOption[] = [
 export function separationModelLabel(filename: string): string {
   return SEPARATION_MODELS.find((m) => m.filename === filename)?.label ?? filename;
 }
+
+/**
+ * 「自动」模式优先选用的硬件加速模型（torch 系）。
+ * separationModel 为空时：torch 可用（CUDA / MPS）就用它，否则回落 modelName（MDX / ONNX CPU）。
+ */
+export const AUTO_HW_SEPARATION_MODEL =
+  SEPARATION_MODELS.find((m) => m.gpu)?.filename ?? '';
 
 export interface JobConfig {
   sourcePath: string;

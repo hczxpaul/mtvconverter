@@ -70,7 +70,9 @@ export function MoreSettings({
               value={config.separationModel}
               onChange={(e) => onPatch({ separationModel: e.target.value })}
             >
-              <option value="">MDX-NET Inst HQ3（默认）</option>
+              <option value="">
+                {torchLabel ? `自动（优先 ${torchLabel} 硬件加速）` : '自动（优先硬件加速，不可用则 MDX/CPU）'}
+              </option>
               {SEPARATION_MODELS.filter((m) => m.filename !== 'UVR-MDX-NET-Inst_HQ_3.onnx').map((m) => (
                 <option key={m.filename} value={m.filename} disabled={m.gpu && !sepGpuReady}>
                   {m.label}{m.gpu && !sepGpuReady ? '（需 GPU / MPS 运行时）' : ''}
@@ -79,9 +81,13 @@ export function MoreSettings({
             </select>
             <span className="unit">
               {!sepGpuReady
-                ? '未检测到可用的 torch 加速设备（CUDA / MPS）；Roformer 跑不动，先装 GPU 运行时'
-                : (SEPARATION_MODELS.find((m) => m.filename === config.separationModel)?.note
-                  ?? (torchLabel ? `CPU 就能跑，最快；Roformer 可走 ${torchLabel} 加速` : 'CPU 就能跑，最快；质量一般'))}
+                ? '未检测到可用的 torch 加速设备（CUDA / MPS）；自动模式将使用 MDX-NET（CPU）'
+                : config.separationModel
+                  ? (SEPARATION_MODELS.find((m) => m.filename === config.separationModel)?.note
+                    ?? 'CPU 就能跑，最快；质量一般')
+                  : (torchLabel
+                    ? `自动：用 BS-Roformer 走 ${torchLabel} 加速（首次需下载模型）；torch 不可用时回落 MDX`
+                    : '自动：当前仅 MDX/CPU 可用')}
             </span>
           </label>
         )}
@@ -121,7 +127,7 @@ export function MoreSettings({
               ? '几乎无损，体积与源持平或略大。'
               : config.compressionPreset === 'size'
                 ? '约省 40% 空间，快速运动画面能看出差别。'
-                : '约省 20% 空间，画质基本无感（实测 VMAF 91.8）。'}
+                : '约省 20% 空间，画质基本无感。'}
           </p>
         </label>
       </section>
