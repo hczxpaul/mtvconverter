@@ -89,10 +89,12 @@ export const TRACK_METADATA = {
 export const DEFAULTS = {
   container: 'mp4' as OutputContainer,
   extension: '.mp4',
-  // 默认「硬件优先」：HEVC 在 macOS(Apple Silicon) 与 Windows(NVIDIA) 都有硬件编码器，
-  // 探测不到时编码层自动回落 libx265（见 PipelineController 的三层选择）。
-  // 想要更小体积时手动切 AV1（同画质约省 36%，但 Apple Silicon 无 AV1 硬编，只能软件）。
-  videoCodec: 'hevc' as VideoCodec,
+  // 默认「硬件优先」，格式按平台分：
+  // - Windows(NVIDIA)：AV1 有 av1_nvenc 硬编，同画质体积比 HEVC 小约 36%，默认 AV1；
+  // - macOS(Apple Silicon)：全系无 AV1 硬编，默认 HEVC（VideoToolbox）。
+  // 两端探测不到硬编时由 PipelineController 三层选择自动回落 libsvtav1 / libx265。
+  // 渲染层里 `process` 不保证存在（contextIsolation），取不到就按 hevc 兜底，随后会被 configGet 覆盖。
+  videoCodec: (typeof process !== 'undefined' && process.platform === 'win32' ? 'av1' : 'hevc') as VideoCodec,
   videoEncoder: 'hardware' as VideoEncoderPreference,
   outputConflict: 'suffix' as OutputConflict,
   outputSuffix: '-伴奏版',
@@ -314,20 +316,20 @@ export interface SeparationModelOption {
 export const SEPARATION_MODELS: SeparationModelOption[] = [
   {
     filename: 'UVR-MDX-NET-Inst_HQ_3.onnx',
-    label: 'MDX-NET Inst HQ3（默认）',
-    note: 'CPU 就能跑，最快；质量一般',
+    label: 'MDX-NET Inst HQ3（CPU 兜底）',
+    note: 'CPU 就能跑，最快；质量一般。自动模式仅在两个 Roformer 都未下载时使用',
     gpu: false,
   },
   {
     filename: 'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
-    label: 'BS-Roformer Viperx 1297',
+    label: 'BS-Roformer Viperx 1297（通用最强）',
     note: '通用最强；需 torch 加速（CUDA / MPS），首次运行会下载模型',
     gpu: true,
   },
   {
     filename: 'mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt',
-    label: 'Mel-Roformer Karaoke（保留和声）',
-    note: '专为伴奏 / 卡拉OK 调；需 torch 加速（CUDA / MPS），首次运行会下载模型',
+    label: 'Mel-Roformer Karaoke（保留和声 · 自动首选）',
+    note: 'Karaoke 专用，保留伴唱和声；需 torch 加速（CUDA / MPS），首次运行会下载模型',
     gpu: true,
   },
 ];
@@ -337,11 +339,20 @@ export function separationModelLabel(filename: string): string {
 }
 
 /**
- * 「自动」模式优先选用的硬件加速模型（torch 系）。
+ * 「自动」模式的候选顺序（按优先级）：Karaoke 版优先，其次通用 BS-Roformer。
+ * 本项目输出给点歌用，Karaoke 模型保留伴唱和声、主唱削得更干净，实际唱起来更接近成品伴奏。
+ * 运行时会跳过本机未下载的模型（见 `BackendDecision.autoSeparationModel`），都没有才回落 MDX。
+ */
+export const AUTO_SEPARATION_CANDIDATES: readonly string[] = [
+  'mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt',
+  'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+];
+
+/**
+ * 「自动」模式的首选硬件加速模型（torch 系）。
  * separationModel 为空时：torch 可用（CUDA / MPS）就用它，否则回落 modelName（MDX / ONNX CPU）。
  */
-export const AUTO_HW_SEPARATION_MODEL =
-  SEPARATION_MODELS.find((m) => m.gpu)?.filename ?? '';
+export const AUTO_HW_SEPARATION_MODEL = AUTO_SEPARATION_CANDIDATES[0];
 
 export interface JobConfig {
   sourcePath: string;
@@ -464,6 +475,12 @@ export interface BackendDecision {
    * 缺省按 cpu 处理。
    */
   torchBackend?: 'cuda' | 'mps' | 'cpu';
+  /**
+   * `separationModel` 为空（自动）时实际会用的模型文件名：按 `AUTO_SEPARATION_CANDIDATES`
+   * 取本机 `modelDir` 里第一个存在的；torch 不可用或一个都没下载时为 `''`（表示回落 MDX）。
+   * 由硬件探测统一算出，UI 提示与管线共用同一取值。
+   */
+  autoSeparationModel?: string;
   /**
    * Roformer 类模型当前是否可用。**取决于 torch 后端**（cuda / mps 即可用），
    * 不能拿 ONNX 的 separationBackend 判定——那是 MDX 的路径。

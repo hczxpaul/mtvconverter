@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Backend, BackendDecision, MediaCapabilities, RuntimePaths } from '../../shared/contracts';
+import { AUTO_SEPARATION_CANDIDATES } from '../../shared/contracts';
 import { logHardware } from './log';
 
 /** 原因码：写入 BackendDecision.reasonCode 与日志，供「详情」一键展开。 */
@@ -130,6 +131,16 @@ function buildDecision(
     torchBackend,
     roformerReady: torchBackend !== 'cpu',
   };
+}
+
+/**
+ * 「自动」分离模型的取值：按 `AUTO_SEPARATION_CANDIDATES` 顺序取 modelDir 里第一个存在的文件
+ * （Karaoke → BS-Roformer）；目录为空或一个都没下载时返回 `''`，表示回落 MDX / CPU。
+ * 放在探测层而不是管线里，UI 提示与管线才能共用同一结论。
+ */
+export function pickAutoSeparationModel(modelDir: string): string {
+  if (!modelDir) return '';
+  return AUTO_SEPARATION_CANDIDATES.find((f) => fs.existsSync(path.join(modelDir, f))) ?? '';
 }
 
 /**

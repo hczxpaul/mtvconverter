@@ -265,19 +265,21 @@
 - `naming` 缺失 / 未填完整时依次回退 `outputName` → 源文件名，旧配置无需迁移。
 - 同名冲突仍走 `outputConflict`：默认加 `outputSuffix`（`-伴奏版`），用户显式选择时覆盖源文件。
 
-#### 5.2.2 分离模型（v1.1 新增）
+#### 5.2.2 分离模型（v1.1 新增，v1.2 调整自动口径）
 
-`JobConfig.separationModel` 存模型文件名，空字符串 = 运行时默认（`UVR-MDX-NET-Inst_HQ_3.onnx`）。模型文件放 userData 的 `models/`，不随包分发；首次运行由 audio-separator 按注册表下载（含 yaml 配置）。
+`JobConfig.separationModel` 存模型文件名，**空字符串 = 自动**：按 `AUTO_SEPARATION_CANDIDATES` 顺序取「本机已下载的第一个」，都取不到才回落 `UVR-MDX-NET-Inst_HQ_3.onnx`。模型文件放 userData 的 `models/`，不随包分发；首次运行由 audio-separator 按注册表下载（含 yaml 配置）。
 
 | 模型 | 定位 | GPU |
 | --- | --- | --- |
-| `UVR-MDX-NET-Inst_HQ_3.onnx` | 默认；CPU 可跑，最快 | 不需要 |
-| `model_bs_roformer_ep_317_sdr_12.9755.ckpt`（BS-Roformer Viperx 1297） | 通用最强，人声残留最少 | 必须 |
-| `mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt` | Karaoke 专用，保留伴唱和声 | 必须 |
+| `UVR-MDX-NET-Inst_HQ_3.onnx` | CPU 兜底；最快、质量一般 | 不需要 |
+| `model_bs_roformer_ep_317_sdr_12.9755.ckpt`（BS-Roformer Viperx 1297） | 通用最强，人声残留最少；自动模式的次选 | 必须 |
+| `mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt` | Karaoke 专用，保留伴唱和声；**自动模式首选** | 必须 |
 
-- Roformer 走 torch，必须装 GPU 运行时（`--setup-uvr --gpu`：CUDA torch + onnxruntime-gpu）；CPU 上不要选，耗时会失控。
+- 自动顺序：**Karaoke（karaoke_aufr33_viperx）→ BS-Roformer 1297 → MDX/CPU**。理由：本项目输出给点歌用，Karaoke 版保留和声、主唱削得更干净，实际唱起来比通用模型更接近成品伴奏；未装该模型时再退 BS。
+- 自动结果由硬件探测写入 `BackendDecision.autoSeparationModel`（按 `modelDir` 实际存在与否判定），UI 提示与管线共用同一取值，不各算一套。
+- Roformer 走 torch，必须装 GPU 运行时（`--setup-uvr --gpu`：CUDA torch + onnxruntime-gpu）；CPU 上不要选，耗时会失控。macOS 由 MPS 承担（`torchBackend=mps` 即 `roformerReady=true`）。
 - 选模型只改 `separationModel`，`AccompanimentAdapter` 仍以 CLI 为唯一集成面：`-m <filename> --model_file_dir <userData>/models`。
-- 模型缺失 / 下载失败沿用 `E_UVR_MODEL_MISSING`，不静默回退到别的模型。
+- 显式选定的模型缺失 / 下载失败沿用 `E_UVR_MODEL_MISSING`，不静默换模型；只有「自动」才允许按候选顺序回落。
 
 ### 5.3 FFmpeg 调用契约示意（外部工具参数，非代码实现）
 
@@ -299,6 +301,7 @@ ffmpeg -y -i <src> -i <work>/original.wav -i <work>/instrumental.wav
 ```
 > `-map` 的书写顺序即音频流顺序，**先原唱后伴奏**，是「音轨 0 原唱 / 音轨 1 伴奏」的唯一权威保证。
 > `-tag:v hvc1` 提升 MP4 中 HEVC 的播放器识别率；`-fps_mode passthrough` 避免重编码引入重复 / 丢帧导致音画偏移；`-map_metadata 0` 与旋转 / 色彩元数据需显式校验保留。
+> **默认编码按平台分**：`win32` 默认 **AV1 + 硬件（`av1_nvenc`，自检不过回落 `libsvtav1`）**——RTX 40 起有 AV1 硬编，同画质体积比 HEVC 小约 36%；`darwin`（Apple Silicon）默认 **HEVC + 硬件（`hevc_videotoolbox`，回落 `libx265`）**——Apple Silicon 全系无 AV1 硬编。两者都是「格式 + 硬件 + 回落」三层选择，用户可手动改。
 > **HDR 源**：需透传 `color_primaries / color_trc / colorspace / master-display` 等并保留 10bit；P0 可先限定 SDR，HDR 列为 P2 并给出「暂不支持」提示。
 
 **压缩档位（默认值需 P0 实测校准）**：

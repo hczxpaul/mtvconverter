@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   STAGE_WEIGHTS, COMPRESSION_PRESETS, TRACK_METADATA, DEFAULTS,
   DEFAULT_SUBTITLE_STYLE, makeDefaultConfig, IPC, crfFor, SEPARATION_MODELS,
+  AUTO_SEPARATION_CANDIDATES, AUTO_HW_SEPARATION_MODEL,
 } from '../src/shared/contracts';
 
 describe('§4.2 阶段权重 STAGE_WEIGHTS', () => {
@@ -119,10 +120,17 @@ describe('makeDefaultConfig / 默认字幕样式 / IPC 通道', () => {
     expect(c.separationModel).toBe('');
   });
 
-  it('§5.2.2 分离模型清单：默认 MDX + 两个 Roformer（后者要求 GPU）', () => {
+  it('§5.2.2 分离模型清单：MDX 作 CPU 兜底 + 两个 Roformer（要求 GPU）', () => {
     expect(SEPARATION_MODELS[0].filename).toBe('UVR-MDX-NET-Inst_HQ_3.onnx');
     expect(SEPARATION_MODELS.filter((m) => m.filename.endsWith('.ckpt')).length).toBe(2);
     for (const m of SEPARATION_MODELS) expect(m.label.length).toBeGreaterThan(0);
+  });
+
+  it('§5.2.2 自动模式顺序：Karaoke 优先，其次 BS-Roformer', () => {
+    expect(AUTO_SEPARATION_CANDIDATES[0]).toBe('mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt');
+    expect(AUTO_SEPARATION_CANDIDATES[1]).toBe('model_bs_roformer_ep_317_sdr_12.9755.ckpt');
+    // 「自动」首选必须就是候选表第一位，避免两处常量各写一份走偏
+    expect(AUTO_HW_SEPARATION_MODEL).toBe(AUTO_SEPARATION_CANDIDATES[0]);
   });
 
   it('默认关闭歌词 / 不烧录 / 详细模式关 / 歌词区默认折叠', () => {
@@ -150,13 +158,13 @@ describe('makeDefaultConfig / 默认字幕样式 / IPC 通道', () => {
     expect(new Set(all).size).toBe(all.length); // 无重复通道名
   });
 
-  it('默认硬件优先：HEVC + 硬件编码，探测不到硬件时由编码层自动回落软件', () => {
-    // HEVC 在 macOS(Apple Silicon) / Windows(NVIDIA) 均有硬编；AV1 在 Apple Silicon 无硬编，
-    // 作为「更省体积」的可选项保留，不设默认。
-    expect(DEFAULTS.videoCodec).toBe('hevc');
+  it('默认硬件优先，且格式按平台分：Windows=AV1、macOS=HEVC', () => {
+    // Windows(NVIDIA) 有 av1_nvenc，同画质体积比 HEVC 小约 36%；Apple Silicon 全系无 AV1 硬编，
+    // 只能 HEVC + VideoToolbox。两端都保持「硬件编码」偏好，探测不到时由编码层回落软件。
     expect(DEFAULTS.videoEncoder).toBe('hardware');
-    expect(makeDefaultConfig().videoCodec).toBe('hevc');
     expect(makeDefaultConfig().videoEncoder).toBe('hardware');
+    expect(DEFAULTS.videoCodec).toBe(process.platform === 'win32' ? 'av1' : 'hevc');
+    expect(makeDefaultConfig().videoCodec).toBe(process.platform === 'win32' ? 'av1' : 'hevc');
   });
 
   it('CRF 按编码格式取：AV1 用 0–63 量纲，不能直接套 x265 的档位', () => {

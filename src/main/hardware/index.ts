@@ -8,7 +8,7 @@ import * as fsp from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { IPC, type BackendDecision, type HardwarePort, type MediaCapabilities, type RuntimePaths } from '../../shared/contracts';
-import { detectBackend, reconcileSeparation } from './detectors';
+import { detectBackend, pickAutoSeparationModel, reconcileSeparation } from './detectors';
 import { logHardware, setHardwareLogger, type ModuleLogSink } from './log';
 
 export class HardwareProbe extends EventEmitter implements HardwarePort {
@@ -52,10 +52,15 @@ export class HardwareProbe extends EventEmitter implements HardwarePort {
     const reconciled = reconcileSeparation(detected, providers);
     // torch 设备以运行时事实为准（Roformer 的可用性看它，而不是 ONNX 的 separationBackend）
     const torchBackend = this.torchDevice ? await this.torchDevice() : reconciled.torchBackend;
+    const roformerReady = (torchBackend ?? 'cpu') !== 'cpu';
+    // 「自动」= 按候选顺序取本机已下载的模型（Karaoke 优先，其次 BS-Roformer）；
+    // 一个都没下载时留空，管线回落 MDX/CPU。文件判断放这里，UI 与管线共用同一结果。
+    const autoSeparationModel = roformerReady ? pickAutoSeparationModel(this.paths.modelDir) : '';
     const decision: BackendDecision = {
       ...reconciled,
       ...(torchBackend ? { torchBackend } : {}),
-      roformerReady: (torchBackend ?? 'cpu') !== 'cpu',
+      roformerReady,
+      autoSeparationModel,
     };
     logHardware(decision.degraded ? 'warn' : 'info', 'hardware.detect.result', {
       platform: decision.platform,
@@ -64,6 +69,7 @@ export class HardwareProbe extends EventEmitter implements HardwarePort {
       separationProvider: decision.separationProvider,
       torchBackend: decision.torchBackend,
       roformerReady: decision.roformerReady,
+      autoSeparationModel: decision.autoSeparationModel,
       encodeEncoder: decision.encodeEncoder,
       previewEncoder: decision.previewEncoder,
       reasonCode: decision.reasonCode,

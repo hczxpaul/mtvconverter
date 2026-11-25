@@ -1,4 +1,4 @@
-import { COMPRESSION_PRESETS, SEPARATION_MODELS } from '../../shared/contracts';
+import { COMPRESSION_PRESETS, SEPARATION_MODELS, separationModelLabel } from '../../shared/contracts';
 import type {
   BackendDecision, CompressionPreset, JobConfig, OutputContainer,
   VideoCodec, VideoEncoderPreference,
@@ -71,7 +71,7 @@ export function MoreSettings({
               onChange={(e) => onPatch({ separationModel: e.target.value })}
             >
               <option value="">
-                {torchLabel ? `自动（优先 ${torchLabel} 硬件加速）` : '自动（优先硬件加速，不可用则 MDX/CPU）'}
+                {torchLabel ? `自动（Karaoke 优先 · ${torchLabel} 加速）` : '自动（优先硬件加速，不可用则 MDX/CPU）'}
               </option>
               {SEPARATION_MODELS.filter((m) => m.filename !== 'UVR-MDX-NET-Inst_HQ_3.onnx').map((m) => (
                 <option key={m.filename} value={m.filename} disabled={m.gpu && !sepGpuReady}>
@@ -85,9 +85,9 @@ export function MoreSettings({
                 : config.separationModel
                   ? (SEPARATION_MODELS.find((m) => m.filename === config.separationModel)?.note
                     ?? 'CPU 就能跑，最快；质量一般')
-                  : (torchLabel
-                    ? `自动：用 BS-Roformer 走 ${torchLabel} 加速（首次需下载模型）；torch 不可用时回落 MDX`
-                    : '自动：当前仅 MDX/CPU 可用')}
+                  : (backend?.autoSeparationModel
+                    ? `自动：用 ${separationModelLabel(backend.autoSeparationModel)} 走 ${torchLabel}（Karaoke 优先，缺失时回落 BS-Roformer / MDX）`
+                    : '自动：未找到 Roformer 模型，将用 MDX（CPU）；可用 `npm run resources:fetch-optional` 下载')}
             </span>
           </label>
         )}

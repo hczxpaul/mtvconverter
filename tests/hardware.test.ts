@@ -4,7 +4,10 @@
  * 曾在 N 卡 Windows 机器上把 CPU 分离谎报成 cuda，这里锁住校正行为。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { reconcileSeparation, inferTorchBackend } from '../src/main/hardware/detectors';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pickAutoSeparationModel, reconcileSeparation, inferTorchBackend } from '../src/main/hardware/detectors';
 import { setHardwareLogger } from '../src/main/hardware/log';
 import type { BackendDecision } from '../src/shared/contracts';
 
@@ -89,5 +92,31 @@ describe('inferTorchBackend：Roformer 的可用性看 torch，不看 ONNX', () 
 
   it('Linux → cpu', () => {
     expect(inferTorchBackend('linux', 'x64', 'cpu')).toBe('cpu');
+  });
+});
+
+describe('pickAutoSeparationModel：Karaoke 优先，其次 BS-Roformer', () => {
+  const KARAOKE = 'mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt';
+  const BS = 'model_bs_roformer_ep_317_sdr_12.9755.ckpt';
+  let dir = '';
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mtvc-models-'));
+  });
+
+  it('目录为空 → 返回空串（回落 MDX）', () => {
+    expect(pickAutoSeparationModel('')).toBe('');
+    expect(pickAutoSeparationModel(dir)).toBe('');
+  });
+
+  it('只有 BS 时用 BS', () => {
+    writeFileSync(join(dir, BS), '');
+    expect(pickAutoSeparationModel(dir)).toBe(BS);
+  });
+
+  it('两个都在时优先 Karaoke', () => {
+    writeFileSync(join(dir, KARAOKE), '');
+    expect(pickAutoSeparationModel(dir)).toBe(KARAOKE);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
