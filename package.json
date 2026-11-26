@@ -1,6 +1,6 @@
 {
   "name": "mtvconverter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "把仅含原唱音轨的 MV / live 视频转换为原分辨率 H.265 双音轨 MTV 文件",
   "private": true,
   "main": "dist/main/main/index.js",

@@ -25,8 +25,8 @@ MTV Converter 把这些步骤串成一条流水线：拖入视频 → 自动生�
 
 | 平台 | 安装包 |
 | --- | --- |
-| macOS 13+（Apple Silicon） | `MTV Converter-1.0.0-arm64.dmg` |
-| Windows 10/11（x64） | `MTV Converter-Setup-1.0.0.exe` |
+| macOS 13+（Apple Silicon） | `MTV Converter-1.0.1-arm64.dmg` |
+| Windows 10/11（x64） | `MTV Converter-Setup-1.0.1.exe` |
 
 macOS 首次打开若被 Gatekeeper 拦截，右键「打开」或在「系统设置 → 隐私与安全性」放行。
 
